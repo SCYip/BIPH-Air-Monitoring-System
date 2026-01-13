@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Air Quality Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="js/data-manager.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        /* Pulse animation for the online dot */
+        @keyframes ping-slow {
+            75%, 100% { transform: scale(2); opacity: 0; }
+        }
+        .animate-ping-slow {
+            animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Navigation / Header -->
+    <nav class="bg-white shadow-sm border-b border-slate-200 z-20 relative">
+        <div class="px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="goHome()">
+                    <div class="bg-blue-600 text-white p-2 rounded-lg">
+                        <i class="fa-solid fa-wind"></i>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight text-slate-900">CampusAir<span class="text-blue-600">Guard</span></span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <!-- Status Badge (Only visible in Dashboard View) -->
+                    <div id="status-badge" class="hidden items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500 transition-colors duration-300">
+                        <span class="relative flex h-2 w-2">
+                          <span id="status-ping" class="hidden absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping-slow"></span>
+                          <span id="status-dot" class="relative inline-flex rounded-full h-2 w-2 bg-slate-400 transition-colors duration-300"></span>
+                        </span>
+                        <span id="status-text">System Offline</span>
+                    </div>
+
+                    <!-- Nav Buttons -->
+                    <button id="home-btn" onclick="goHome()" class="hidden text-slate-500 hover:text-slate-700 font-medium text-sm">
+                        <i class="fa-solid fa-arrow-left mr-1"></i> Back to Map
+                    </button>
+                    
+                    <button id="settings-btn" onclick="toggleSettings()" class="hidden text-slate-500 hover:text-slate-700 transition-colors p-2 rounded-full hover:bg-slate-100" title="Settings">
+                        <i class="fa-solid fa-gear text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- VIEW: HOME (List of Locations) -->
+    <div id="view-home" class="flex-grow p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        <div class="flex justify-between items-end mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-900">Campus Locations</h1>
+                <p class="text-slate-500 mt-1">Select a location to view real-time air quality metrics.</p>
+            </div>
+            <button onclick="createNewLocation()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+                <i class="fa-solid fa-plus mr-2"></i> Add Location
+            </button>
+        </div>
+
+        <div id="locations-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Location cards injected by JS -->
+        </div>
+    </div>
+
+
+    <!-- Settings/Edit Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md m-4">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="modal-title" class="text-xl font-bold text-slate-900">Edit Location</h2>
+                <button onclick="toggleSettings()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <input type="hidden" id="edit-id">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Location Name</label>
+                    <input type="text" id="loc-name-input" placeholder="e.g., Main Library" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">ThingSpeak Channel ID</label>
+                    <input type="text" id="channel-id-input" placeholder="e.g., 123456" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Read API Key</label>
+                    <input type="password" id="api-key-input" placeholder="e.g., ABC123XYZ" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </div>
+                
+                <div class="space-y-3">
+                    <div class="bg-blue-50 p-4 rounded-lg flex items-start gap-3">
+                        <i class="fa-solid fa-circle-info text-blue-500 mt-1"></i>
+                        <div class="text-xs text-blue-700">
+                            <strong>ThingSpeak Configuration:</strong><br>
+                            Field 1 = CO2 (ppm)<br>
+                            Field 2 = Humidity (%)<br><br>
+                            <strong>Keyboard Shortcuts:</strong><br>
+                            <kbd class="px-1 py-0.5 bg-blue-100 rounded text-xs">Esc</kbd> Close modal<br>
+                            <kbd class="px-1 py-0.5 bg-blue-100 rounded text-xs">Ctrl+N</kbd> New location<br>
+                            <kbd class="px-1 py-0.5 bg-blue-100 rounded text-xs">Ctrl+H</kbd> Go home
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex gap-3">
+                <button onclick="deleteLocation()" id="delete-btn" class="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium">Delete</button>
+                <button onclick="saveSettings()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors">
+                    Save Location
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        let currentLocId = null;
+        let fetchInterval = null;
+        let isLoading = false;
+
+        // --- View Navigation ---
+        
+        function init() {
+            renderHome();
+        }
+
+        function goHome() {
+            // Stop fetching specific data
+            if(fetchInterval) clearInterval(fetchInterval);
+            currentLocId = null;
+
+            // UI Switch
+            document.getElementById('view-home').classList.remove('hidden');
+            document.getElementById('view-dashboard').classList.add('hidden');
+
+            // Nav Updates
+            document.getElementById('home-btn').classList.add('hidden');
+            document.getElementById('settings-btn').classList.add('hidden');
+            document.getElementById('status-badge').classList.remove('flex'); // Hide flex
+            document.getElementById('status-badge').classList.add('hidden');
+
+            renderHome();
+        }
+
+        function openDashboard(id) {
+            // Navigate to dashboard page with location parameter
+            window.location.href = `/dashboard/${encodeURIComponent(id)}`;
+        }
+
+        // --- Home View Logic ---
+
+        function renderHome() {
+            const grid = document.getElementById('locations-grid');
+            grid.innerHTML = '';
+
+            const locations = locationManager.getAllLocations();
+
+            // Show placeholder if no locations exist
+            if (locations.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full flex flex-col items-center justify-center py-16 px-6 text-center">
+                        <div class="bg-slate-100 rounded-full p-6 mb-6">
+                            <i class="fa-solid fa-location-dot text-4xl text-slate-400"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-slate-900 mb-2">No Locations Added Yet</h3>
+                        <p class="text-slate-500 mb-6 max-w-md">
+                            Add your first air quality monitoring location to get started.
+                            You'll need a ThingSpeak channel ID and read API key.
+                        </p>
+                        <button onclick="createNewLocation()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm">
+                            <i class="fa-solid fa-plus mr-2"></i> Add Your First Location
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            locations.forEach(loc => {
+                const isConfigured = loc.channelId && loc.readKey;
+                
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-2xl shadow-sm border border-slate-200 p-6 card-hover transition-all cursor-pointer relative group";
+                card.onclick = (e) => {
+                    // Prevent jump if clicking edit button
+                    if(e.target.closest('.edit-btn')) return;
+                    openDashboard(loc.id);
+                };
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="bg-blue-50 text-blue-600 h-10 w-10 rounded-full flex items-center justify-center">
+                            <i class="fa-solid fa-location-dot"></i>
+                        </div>
+                        <button class="edit-btn text-slate-300 hover:text-blue-600 transition-colors p-1" onclick="openEditModal('${loc.id}')">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                    </div>
+                    <h3 class="font-bold text-lg text-slate-900 mb-1">${loc.name}</h3>
+                    <div class="flex items-center gap-2 text-sm text-slate-500 mb-4">
+                        <span class="w-2 h-2 rounded-full ${isConfigured ? 'bg-slate-400' : 'bg-slate-300'}"></span>
+                        ${isConfigured ? 'Ready to connect' : 'System Offline'}
+                    </div>
+                    <div class="text-xs text-slate-400 border-t pt-3 flex justify-between">
+                        <span>Channel: ${loc.channelId || '---'}</span>
+                        <span class="text-blue-600 font-medium">View Data &rarr;</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // --- Settings / Modal Logic ---
+
+        function createNewLocation() {
+            const newId = 'loc_' + Date.now();
+            openEditModal(newId, true);
+        }
+
+        function openEditModal(id, isNew = false) {
+            const modal = document.getElementById('settings-modal');
+            const loc = locationManager.getLocationById(id) || { id: id, name: '', channelId: '', readKey: '' };
+
+            document.getElementById('edit-id').value = id;
+            document.getElementById('loc-name-input').value = loc.name;
+            document.getElementById('channel-id-input').value = loc.channelId;
+            document.getElementById('api-key-input').value = loc.readKey;
+            
+            document.getElementById('modal-title').innerText = isNew ? "Add Location" : "Edit Location";
+            document.getElementById('delete-btn').style.display = isNew ? 'none' : 'block';
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function toggleSettings() {
+            if(currentLocId) {
+                openEditModal(currentLocId);
+            } else {
+                document.getElementById('settings-modal').classList.add('hidden');
+            }
+        }
+
+        function saveSettings() {
+            const id = document.getElementById('edit-id').value;
+            const name = document.getElementById('loc-name-input').value.trim();
+            const cId = document.getElementById('channel-id-input').value.trim();
+            const key = document.getElementById('api-key-input').value.trim();
+
+            // Validation
+            if (!name) {
+                alert('Please enter a location name');
+                document.getElementById('loc-name-input').focus();
+                return;
+            }
+
+            if (cId && !/^\d+$/.test(cId)) {
+                alert('Channel ID must be numeric');
+                document.getElementById('channel-id-input').focus();
+                return;
+            }
+
+            if (key && key.length < 16) {
+                alert('API key appears to be too short');
+                document.getElementById('api-key-input').focus();
+                return;
+            }
+
+            const locationData = {
+                id: id,
+                name: name || 'Unnamed Location',
+                channelId: cId,
+                readKey: key
+            };
+
+            const existingLocation = locationManager.getLocationById(id);
+
+            try {
+                if(existingLocation) {
+                    // Update existing location
+                    locationManager.updateLocation(id, locationData);
+                } else {
+                    // Create new location
+                    locationManager.createLocation(locationData);
+                }
+
+                // Close modal
+                document.getElementById('settings-modal').classList.add('hidden');
+                document.getElementById('settings-modal').classList.remove('flex');
+
+                // Refresh view
+                if(currentLocId === id) {
+                    // If we edited the currently open dashboard, refresh it
+                    openDashboard(id);
+                } else {
+                    renderHome();
+                }
+            } catch (error) {
+                console.error('Error saving location:', error);
+                alert('Error saving location. Please try again.');
+            }
+        }
+
+        function deleteLocation() {
+            const id = document.getElementById('edit-id').value;
+            if(confirm('Are you sure you want to delete this location?')) {
+                locationManager.deleteLocation(id);
+
+                document.getElementById('settings-modal').classList.add('hidden');
+                document.getElementById('settings-modal').classList.remove('flex');
+
+                if(currentLocId === id) goHome();
+                else renderHome();
+            }
+        }
+
+
+
+
+
+
+        // --- Keyboard Shortcuts ---
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // ESC to close modal
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('settings-modal');
+                if (!modal.classList.contains('hidden')) {
+                    toggleSettings();
+                }
+            }
+
+            // Ctrl/Cmd + N for new location
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                e.preventDefault();
+                createNewLocation();
+            }
+        });
+
+        // --- Start App ---
+        init();
+
+    </script>
+</body>
+</html>

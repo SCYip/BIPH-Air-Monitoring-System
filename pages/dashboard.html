@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Air Quality Monitor - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="js/data-manager.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        /* Pulse animation for the online dot */
+        @keyframes ping-slow {
+            75%, 100% { transform: scale(2); opacity: 0; }
+        }
+        .animate-ping-slow {
+            animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Navigation / Header -->
+    <nav class="bg-white shadow-sm border-b border-slate-200 z-20 relative">
+        <div class="px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="goHome()">
+                    <div class="bg-blue-600 text-white p-2 rounded-lg">
+                        <i class="fa-solid fa-wind"></i>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight text-slate-900">CampusAir<span class="text-blue-600">Guard</span></span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <!-- Status Badge (Always visible in Dashboard) -->
+                    <div id="status-badge" class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500 transition-colors duration-300">
+                        <span class="relative flex h-2 w-2">
+                          <span id="status-ping" class="hidden absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping-slow"></span>
+                          <span id="status-dot" class="relative inline-flex rounded-full h-2 w-2 bg-slate-400 transition-colors duration-300"></span>
+                        </span>
+                        <span id="status-text">System Offline</span>
+                    </div>
+
+                    <!-- Nav Buttons -->
+                    <button id="home-btn" onclick="goHome()" class="text-slate-500 hover:text-slate-700 font-medium text-sm">
+                        <i class="fa-solid fa-arrow-left mr-1"></i> Back to Map
+                    </button>
+
+                    <button id="settings-btn" onclick="toggleSettings()" class="text-slate-500 hover:text-slate-700 transition-colors p-2 rounded-full hover:bg-slate-100" title="Settings">
+                        <i class="fa-solid fa-gear text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- DASHBOARD CONTENT -->
+    <div class="flex-grow p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+
+        <!-- Header Section -->
+        <div class="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+                <h1 id="dash-title" class="text-2xl sm:text-3xl font-bold text-slate-900">Dashboard</h1>
+                <p id="dash-subtitle" class="text-slate-500 mt-1">Real-time monitoring</p>
+            </div>
+            <div class="text-sm text-slate-400 font-medium">
+                Last Update: <span id="last-update-time" class="text-slate-700">--:--:--</span>
+            </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+
+            <!-- CO2 Card -->
+            <div class="glass-panel bg-white rounded-2xl shadow-sm border border-slate-200 p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i class="fa-solid fa-cloud text-8xl text-slate-800"></i>
+                </div>
+
+                <div class="flex justify-between items-start mb-4 relative z-10">
+                    <div>
+                        <h3 class="text-slate-500 font-medium text-sm uppercase tracking-wider">Carbon Dioxide (CO2)</h3>
+                        <div class="flex items-baseline gap-2 mt-2">
+                            <span id="co2-value" class="text-5xl font-bold text-slate-900">--</span>
+                            <span class="text-xl text-slate-400 font-medium">ppm</span>
+                        </div>
+                    </div>
+                    <div id="co2-indicator" class="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 transition-colors duration-500">
+                        <i class="fa-solid fa-leaf text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="mt-4 relative z-10">
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div id="co2-bar" class="bg-slate-400 h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between mt-2 text-xs font-medium">
+                        <span id="co2-status-text" class="text-slate-400">Waiting for data...</span>
+                        <span class="text-slate-400">Target: &lt;1000 ppm</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Humidity Card -->
+            <div class="glass-panel bg-white rounded-2xl shadow-sm border border-slate-200 p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i class="fa-solid fa-droplet text-8xl text-blue-800"></i>
+                </div>
+
+                <div class="flex justify-between items-start mb-4 relative z-10">
+                    <div>
+                        <h3 class="text-slate-500 font-medium text-sm uppercase tracking-wider">Relative Humidity</h3>
+                        <div class="flex items-baseline gap-2 mt-2">
+                            <span id="humidity-value" class="text-5xl font-bold text-slate-900">--</span>
+                            <span class="text-xl text-slate-400 font-medium">%</span>
+                        </div>
+                    </div>
+                    <div id="humidity-indicator" class="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
+                        <i class="fa-solid fa-water text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="mt-4 relative z-10">
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div id="humidity-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between mt-2 text-xs font-medium">
+                        <span id="humidity-status-text" class="text-slate-400">Waiting for data...</span>
+                        <span class="text-slate-400">Ideal: 30% - 60%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h3 class="font-bold text-slate-800 mb-4">CO2 History (Last 20 Points)</h3>
+                <div class="relative h-64 w-full">
+                    <canvas id="co2Chart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h3 class="font-bold text-slate-800 mb-4">Humidity History (Last 20 Points)</h3>
+                <div class="relative h-64 w-full">
+                    <canvas id="humidityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings/Edit Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md m-4">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="modal-title" class="text-xl font-bold text-slate-900">Edit Location</h2>
+                <button onclick="toggleSettings()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <input type="hidden" id="edit-id">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Location Name</label>
+                    <input type="text" id="loc-name-input" placeholder="e.g., Main Library" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">ThingSpeak Channel ID</label>
+                    <input type="text" id="channel-id-input" placeholder="e.g., 123456" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Read API Key</label>
+                    <input type="password" id="api-key-input" placeholder="e.g., ABC123XYZ" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </div>
+
+                <div class="space-y-3">
+                    <div class="bg-blue-50 p-4 rounded-lg flex items-start gap-3">
+                        <i class="fa-solid fa-circle-info text-blue-500 mt-1"></i>
+                        <div class="text-xs text-blue-700">
+                            <strong>ThingSpeak Configuration:</strong><br>
+                            Field 1 = CO2 (ppm)<br>
+                            Field 2 = Humidity (%)<br><br>
+                            <strong>Keyboard Shortcuts:</strong><br>
+                            <kbd class="px-1 py-0.5 bg-blue-100 rounded text-xs">Esc</kbd> Close modal<br>
+                            <kbd class="px-1 py-0.5 bg-blue-100 rounded text-xs">Ctrl+N</kbd> New location<br>
+                            <kbd class="px-1 py-0.5 bg-blue-100 rounded text-xs">Ctrl+H</kbd> Go home
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex gap-3">
+                <button onclick="deleteLocation()" id="delete-btn" class="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium">Delete</button>
+                <button onclick="saveSettings()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors">
+                    Save Location
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        let currentLocId = null;
+        let fetchInterval = null;
+        let isLoading = false;
+
+        // Get location ID from URL parameter
+        function getLocationIdFromUrl() {
+            // Extract location ID from URL path: /dashboard/location_id
+            const pathParts = window.location.pathname.split('/');
+            const dashboardIndex = pathParts.indexOf('dashboard');
+            if (dashboardIndex !== -1 && pathParts.length > dashboardIndex + 1) {
+                return decodeURIComponent(pathParts[dashboardIndex + 1]);
+            }
+            return null;
+        }
+
+        function goHome() {
+            // Stop fetching specific data
+            if(fetchInterval) clearInterval(fetchInterval);
+            // Navigate back to home page
+            window.location.href = '/';
+        }
+
+        function toggleSettings() {
+            if(currentLocId) {
+                openEditModal(currentLocId);
+            } else {
+                document.getElementById('settings-modal').classList.add('hidden');
+            }
+        }
+
+        function openEditModal(id, isNew = false) {
+            const modal = document.getElementById('settings-modal');
+            const loc = locationManager.getLocationById(id) || { id: id, name: '', channelId: '', readKey: '' };
+
+            document.getElementById('edit-id').value = id;
+            document.getElementById('loc-name-input').value = loc.name;
+            document.getElementById('channel-id-input').value = loc.channelId;
+            document.getElementById('api-key-input').value = loc.readKey;
+
+            document.getElementById('modal-title').innerText = isNew ? "Add Location" : "Edit Location";
+            document.getElementById('delete-btn').style.display = isNew ? 'none' : 'block';
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function saveSettings() {
+            const id = document.getElementById('edit-id').value;
+            const name = document.getElementById('loc-name-input').value.trim();
+            const cId = document.getElementById('channel-id-input').value.trim();
+            const key = document.getElementById('api-key-input').value.trim();
+
+            // Validation
+            if (!name) {
+                alert('Please enter a location name');
+                document.getElementById('loc-name-input').focus();
+                return;
+            }
+
+            if (cId && !/^\d+$/.test(cId)) {
+                alert('Channel ID must be numeric');
+                document.getElementById('channel-id-input').focus();
+                return;
+            }
+
+            if (key && key.length < 16) {
+                alert('API key appears to be too short');
+                document.getElementById('api-key-input').focus();
+                return;
+            }
+
+            const locationData = {
+                id: id,
+                name: name || 'Unnamed Location',
+                channelId: cId,
+                readKey: key
+            };
+
+            const existingLocation = locationManager.getLocationById(id);
+
+            try {
+                if(existingLocation) {
+                    // Update existing location
+                    locationManager.updateLocation(id, locationData);
+                } else {
+                    // Create new location
+                    locationManager.createLocation(locationData);
+                }
+
+                // Close modal
+                document.getElementById('settings-modal').classList.add('hidden');
+                document.getElementById('settings-modal').classList.remove('flex');
+
+                // Reload dashboard with updated data
+                init();
+            } catch (error) {
+                console.error('Error saving location:', error);
+                alert('Error saving location. Please try again.');
+            }
+        }
+
+        function deleteLocation() {
+            const id = document.getElementById('edit-id').value;
+            if(confirm('Are you sure you want to delete this location?')) {
+                locationManager.deleteLocation(id);
+
+                document.getElementById('settings-modal').classList.add('hidden');
+                document.getElementById('settings-modal').classList.remove('flex');
+
+                // Go back to home since location was deleted
+                goHome();
+            }
+        }
+
+        // --- Chart Initialization (Shared) ---
+        const commonChartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
+                y: { beginAtZero: false, grid: { borderDash: [5, 5] } }
+            },
+            elements: {
+                line: { tension: 0.4, borderWidth: 2 },
+                point: { radius: 2, hitRadius: 10 }
+            },
+            animation: false
+        };
+
+        const co2Ctx = document.getElementById('co2Chart').getContext('2d');
+        const co2Chart = new Chart(co2Ctx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ data: [], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }] },
+            options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: 300, suggestedMax: 1000 } } }
+        });
+
+        const humCtx = document.getElementById('humidityChart').getContext('2d');
+        const humidityChart = new Chart(humCtx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true }] },
+            options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: 0, suggestedMax: 100 } } }
+        });
+
+        function clearCharts() {
+            co2Chart.data.labels = [];
+            co2Chart.data.datasets[0].data = [];
+            co2Chart.update();
+            humidityChart.data.labels = [];
+            humidityChart.data.datasets[0].data = [];
+            humidityChart.update();
+
+            // Reset text
+            document.getElementById('co2-value').innerText = '--';
+            document.getElementById('humidity-value').innerText = '--';
+            document.getElementById('last-update-time').innerText = '--:--:--';
+        }
+
+        // --- Dashboard Data Logic ---
+
+        function updateStatus(state) {
+            const badge = document.getElementById('status-badge');
+            const dot = document.getElementById('status-dot');
+            const ping = document.getElementById('status-ping');
+            const text = document.getElementById('status-text');
+
+            if (state === 'online') {
+                badge.className = "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800";
+                dot.className = "relative inline-flex rounded-full h-2 w-2 bg-green-500";
+                ping.classList.remove('hidden');
+                text.innerText = "System Online";
+            } else if (state === 'loading') {
+                badge.className = "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800";
+                dot.className = "relative inline-flex rounded-full h-2 w-2 bg-blue-500 animate-pulse";
+                ping.classList.add('hidden');
+                text.innerText = "Connecting...";
+            } else {
+                badge.className = "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-slate-200 text-slate-600";
+                dot.className = "relative inline-flex rounded-full h-2 w-2 bg-slate-500";
+                ping.classList.add('hidden');
+
+                if (state === 'error') text.innerText = "Connection Error";
+                else text.innerText = "System Offline";
+            }
+        }
+
+        async function fetchData() {
+            if(!currentLocId || isLoading) return;
+
+            const loc = locationManager.getLocationById(currentLocId);
+            if (!loc || !loc.channelId || !loc.readKey) {
+                updateStatus('offline');
+                return;
+            }
+
+            isLoading = true;
+            updateStatus('loading');
+
+            try {
+                const url = `https://api.thingspeak.com/channels/${loc.channelId}/feeds.json?api_key=${loc.readKey}&results=20`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.feeds && data.feeds.length > 0) {
+                    // Stale check (5 mins)
+                    const lastFeed = data.feeds[data.feeds.length - 1];
+                    const feedTime = new Date(lastFeed.created_at).getTime();
+                    const now = Date.now();
+
+                    if (now - feedTime > 300000) { // 5 mins
+                        updateStatus('offline');
+                    } else {
+                        updateStatus('online');
+                    }
+
+                    processFeeds(data.feeds);
+                } else {
+                    updateStatus('online'); // Connected, just empty
+                    document.getElementById('co2-status-text').innerText = "Channel Empty";
+                    document.getElementById('humidity-status-text').innerText = "Channel Empty";
+                }
+            } catch (error) {
+                console.error("Fetch error:", error);
+                updateStatus('error');
+                // Show error message in status texts
+                document.getElementById('co2-status-text').innerText = "Connection Failed";
+                document.getElementById('humidity-status-text').innerText = "Connection Failed";
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        function processFeeds(feeds) {
+            const labels = [];
+            const co2Data = [];
+            const humData = [];
+
+            feeds.forEach(feed => {
+                if(feed.field1 !== null && feed.field2 !== null) {
+                    const date = new Date(feed.created_at);
+                    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    labels.push(timeStr);
+                    co2Data.push(parseFloat(feed.field1));
+                    humData.push(parseFloat(feed.field2));
+                }
+            });
+
+            const latest = feeds[feeds.length - 1];
+            if (latest) {
+                updateDashboard(latest.field1, latest.field2, latest.created_at);
+            }
+
+            co2Chart.data.labels = labels;
+            co2Chart.data.datasets[0].data = co2Data;
+            humidityChart.data.labels = labels;
+            humidityChart.data.datasets[0].data = humData;
+
+            co2Chart.update();
+            humidityChart.update();
+        }
+
+        function updateDashboard(co2, hum, timestamp) {
+            if (co2 == null || hum == null) return;
+
+            const co2Val = Math.round(co2);
+            const humVal = Math.round(hum);
+
+            document.getElementById('co2-value').innerText = co2Val;
+            document.getElementById('humidity-value').innerText = humVal;
+
+            const date = new Date(timestamp);
+            document.getElementById('last-update-time').innerText = date.toLocaleTimeString();
+
+            // CO2 Logic
+            const co2Bar = document.getElementById('co2-bar');
+            const co2Ind = document.getElementById('co2-indicator');
+            const co2Text = document.getElementById('co2-status-text');
+            const co2Percent = Math.min(100, (co2Val / 2000) * 100);
+            co2Bar.style.width = `${co2Percent}%`;
+
+            if (co2Val < 800) {
+                co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-green-100 text-green-600";
+                co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-green-500";
+                co2Text.innerText = "Excellent Quality";
+                co2Text.className = "text-green-600 font-bold";
+            } else if (co2Val < 1200) {
+                co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-yellow-100 text-yellow-600";
+                co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-yellow-500";
+                co2Text.innerText = "Moderate Quality";
+                co2Text.className = "text-yellow-600 font-bold";
+            } else {
+                co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-red-100 text-red-600";
+                co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-red-500";
+                co2Text.innerText = "Poor Quality (Ventilate)";
+                co2Text.className = "text-red-600 font-bold";
+            }
+
+            // Humidity Logic
+            const humBar = document.getElementById('humidity-bar');
+            const humInd = document.getElementById('humidity-indicator');
+            const humText = document.getElementById('humidity-status-text');
+            humBar.style.width = `${humVal}%`;
+
+            if (humVal >= 30 && humVal <= 60) {
+                humInd.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-blue-100 text-blue-600";
+                humText.innerText = "Comfortable";
+                humText.className = "text-blue-600 font-bold";
+            } else {
+                humInd.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-orange-100 text-orange-600";
+                humText.innerText = humVal < 30 ? "Dry Air" : "High Humidity";
+                humText.className = "text-orange-600 font-bold";
+            }
+        }
+
+        // --- Keyboard Shortcuts and Utilities ---
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // ESC to close modal
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('settings-modal');
+                if (!modal.classList.contains('hidden')) {
+                    toggleSettings();
+                }
+            }
+
+            // Ctrl/Cmd + H for home
+            if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+                e.preventDefault();
+                goHome();
+            }
+        });
+
+        // --- Start App ---
+        function init() {
+            const locationId = getLocationIdFromUrl();
+            if (!locationId) {
+                // No location specified, redirect to home
+                window.location.href = '/';
+                return;
+            }
+
+            const loc = locationManager.getLocationById(locationId);
+            if (!loc) {
+                // Location doesn't exist, redirect to home
+                window.location.href = '/';
+                return;
+            }
+
+            currentLocId = locationId;
+
+            // Set Titles
+            document.getElementById('dash-title').innerText = loc.name;
+            document.getElementById('dash-subtitle').innerText = `ID: ${loc.channelId || 'Not Configured'}`;
+
+            // Reset Charts & UI
+            clearCharts();
+            updateStatus('offline'); // Default to offline until fetch succeeds
+
+            // Start Fetch Loop
+            fetchData();
+            fetchInterval = setInterval(fetchData, 15000);
+        }
+
+        // Initialize when page loads
+        init();
+    </script>
+</body>
+</html>
