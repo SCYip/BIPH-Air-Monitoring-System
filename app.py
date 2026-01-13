@@ -44,12 +44,12 @@ def create_app():
     @app.route('/js/<path:filename>')
     def js_files(filename):
         """Serve JavaScript files."""
-        return send_from_directory(project_root / 'js', filename)
+        return send_from_directory(project_root / 'pages' / 'js', filename)
 
     @app.route('/data/<path:filename>')
     def data_files(filename):
         """Serve data files."""
-        return send_from_directory(project_root / 'data', filename)
+        return send_from_directory(project_root / 'pages' / 'data', filename)
 
     return app
 
@@ -69,7 +69,7 @@ def main():
     project_root = Path(__file__).parent
 
     # Check if required files exist
-    required_files = ['pages/index.html', 'pages/dashboard.html', 'js/data-manager.js', 'data/locations.json']
+    required_files = ['pages/index.html', 'pages/dashboard.html', 'pages/js/data-manager.js', 'pages/data/locations.json']
     missing_files = []
 
     for file_path in required_files:

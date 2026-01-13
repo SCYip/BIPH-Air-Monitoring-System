@@ -16,13 +16,13 @@ A modern web application for monitoring campus air quality using ThingSpeak inte
 ```
 campus-air-monitor/
 ├── app.py                        # Python Flask server (local development)
-├── pages/
+├── pages/                        # Netlify publish directory
 │   ├── index.html               # Home page with location selection
-│   └── dashboard.html           # Dashboard page for monitoring
-├── js/
-│   └── data-manager.js          # Data management module with CRUD operations
-├── data/
-│   └── locations.json           # Location data storage
+│   ├── dashboard.html           # Dashboard page for monitoring
+│   ├── js/
+│   │   └── data-manager.js      # Data management module with CRUD operations
+│   └── data/
+│       └── locations.json       # Location data storage
 ├── netlify.toml                 # Netlify deployment configuration
 └── README.md                    # This documentation
 ```
