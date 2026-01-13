@@ -1,7 +1,7 @@
 [build]
   # Build settings - not needed for static site
   command = "echo 'Static site - no build needed'"
-  publish = "pages"
+  publish = "."
 
 [build.environment]
   # No build environment needed for static files

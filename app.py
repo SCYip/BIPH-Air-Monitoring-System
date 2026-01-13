@@ -29,27 +29,27 @@ def create_app():
     @app.route('/')
     def index():
         """Serve the home page."""
-        return send_from_directory(project_root / 'pages', 'index.html')
+        return send_from_directory(project_root, 'index.html')
 
     @app.route('/dashboard')
     def dashboard():
         """Serve the dashboard page."""
-        return send_from_directory(project_root / 'pages', 'dashboard.html')
+        return send_from_directory(project_root, 'dashboard.html')
 
     @app.route('/dashboard/<path:location>')
     def dashboard_with_location(location):
         """Serve the dashboard page with location parameter."""
-        return send_from_directory(project_root / 'pages', 'dashboard.html')
+        return send_from_directory(project_root, 'dashboard.html')
 
     @app.route('/js/<path:filename>')
     def js_files(filename):
         """Serve JavaScript files."""
-        return send_from_directory(project_root / 'pages' / 'js', filename)
+        return send_from_directory(project_root / 'js', filename)
 
     @app.route('/data/<path:filename>')
     def data_files(filename):
         """Serve data files."""
-        return send_from_directory(project_root / 'pages' / 'data', filename)
+        return send_from_directory(project_root / 'data', filename)
 
     return app
 
@@ -69,7 +69,7 @@ def main():
     project_root = Path(__file__).parent
 
     # Check if required files exist
-    required_files = ['pages/index.html', 'pages/dashboard.html', 'pages/js/data-manager.js', 'pages/data/locations.json']
+    required_files = ['index.html', 'dashboard.html', 'js/data-manager.js', 'data/locations.json']
     missing_files = []
 
     for file_path in required_files:
