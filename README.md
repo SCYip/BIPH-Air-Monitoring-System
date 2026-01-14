@@ -134,19 +134,10 @@ pip3 install flask
    - Click "Add app" → Web app (</>)
    - Copy the config object
 
-3. **Update Firebase Config in HTML files:**
-   Replace the placeholder config in both `index.html` and `dashboard.html`:
+3. **Firebase Config Status:**
+   ✅ **Already configured** with your `biph-aqs` Firebase project!
 
-   ```javascript
-   const firebaseConfig = {
-       apiKey: "your-actual-api-key",
-       authDomain: "your-project.firebaseapp.com",
-       projectId: "your-actual-project-id",
-       storageBucket: "your-project.appspot.com",
-       messagingSenderId: "123456789",
-       appId: "your-actual-app-id"
-   };
-   ```
+   The Firebase configuration is already set up in both HTML files with your project credentials.
 
 4. **Firestore Security Rules:**
    Add these rules in Firebase Console → Firestore → Rules:
