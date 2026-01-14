@@ -65,6 +65,18 @@
             // Initialize - load locations from Firestore
             async initialize() {
                 if (this.initialized) return;
+
+                // Wait briefly for the Firebase SDK to be set by the module script.
+                const start = Date.now();
+                const timeoutMs = 5000;
+                while ((!window.firebase || !window.firebase.db) && (Date.now() - start) < timeoutMs) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
+
+                if (!window.firebase || !window.firebase.db) {
+                    console.warn('Firebase not ready after wait; initialize will attempt to proceed but may fail.');
+                }
+
                 try {
                     await this.loadLocations();
                     this.initialized = true;
