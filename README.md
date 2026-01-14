@@ -112,7 +112,8 @@ testThingSpeakConnection("123456", "API_KEY").then(result => {
 
 ## Prerequisites
 
-Before running the application, install Flask:
+### Local Development
+Install Flask for local development:
 ```bash
 pip install flask
 ```
@@ -120,6 +121,46 @@ or
 ```bash
 pip3 install flask
 ```
+
+### Firebase Setup (Required for Data Storage)
+
+1. **Create a Firebase Project:**
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Click "Create a project" (or select existing)
+   - Enable Firestore Database
+
+2. **Get Firebase Configuration:**
+   - Go to Project Settings → General → Your apps
+   - Click "Add app" → Web app (</>)
+   - Copy the config object
+
+3. **Update Firebase Config in HTML files:**
+   Replace the placeholder config in both `index.html` and `dashboard.html`:
+
+   ```javascript
+   const firebaseConfig = {
+       apiKey: "your-actual-api-key",
+       authDomain: "your-project.firebaseapp.com",
+       projectId: "your-actual-project-id",
+       storageBucket: "your-project.appspot.com",
+       messagingSenderId: "123456789",
+       appId: "your-actual-app-id"
+   };
+   ```
+
+4. **Firestore Security Rules:**
+   Add these rules in Firebase Console → Firestore → Rules:
+
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /locations/{locationId} {
+         allow read, write: if true;  // For demo - restrict in production
+       }
+     }
+   }
+   ```
 
 ## How to Run
 
@@ -145,9 +186,12 @@ python3 app.py
 ## 🚀 Deployment Options
 
 ### Netlify (Static Site)
-1. Upload the entire project folder to Netlify
-2. Netlify automatically uses `netlify.toml` configuration
-3. The `pages/` folder serves as the website root
+1. **Configure Firebase** (see Prerequisites above)
+2. Upload the entire project folder to Netlify
+3. Netlify automatically uses `netlify.toml` configuration
+4. The root directory serves as the website root
+
+**Note:** Firebase configuration is required for data storage to work on Netlify.
 
 ### Other Platforms
 - **Heroku**: Deploy the Flask app (`app.py`)

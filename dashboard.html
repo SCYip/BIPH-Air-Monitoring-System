@@ -7,6 +7,32 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            // TODO: Add your Firebase configuration here
+            // You can find this in your Firebase Console > Project Settings > General > Your apps
+            apiKey: "your-api-key",
+            authDomain: "your-project.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "your-app-id"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Make Firebase available globally
+        window.firebase = { db, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where };
+    </script>
     <script>
         /**
          * Campus Air Quality Monitor - Data Management Module
@@ -14,87 +40,125 @@
          */
 
         class LocationManager {
-            constructor(storageKey = 'campus_locations') {
-                this.storageKey = storageKey;
-                this.defaultLocations = [];
-                this.locations = this.loadLocations();
+            constructor() {
+                this.collectionName = 'locations';
+                this.locations = [];
+                this.initialized = false;
             }
 
-            // Load locations from localStorage or use defaults
-            loadLocations() {
+            // Initialize - load locations from Firestore
+            async initialize() {
+                if (this.initialized) return;
                 try {
-                    const stored = localStorage.getItem(this.storageKey);
-                    return stored ? JSON.parse(stored) : [...this.defaultLocations];
+                    await this.loadLocations();
+                    this.initialized = true;
                 } catch (error) {
-                    console.error('Error loading locations:', error);
-                    return [...this.defaultLocations];
+                    console.error('Error initializing LocationManager:', error);
                 }
             }
 
-            // Save locations to localStorage
-            saveLocations() {
+            // Load locations from Firestore
+            async loadLocations() {
                 try {
-                    localStorage.setItem(this.storageKey, JSON.stringify(this.locations));
-                    return true;
+                    const { db, collection, getDocs } = window.firebase;
+                    const querySnapshot = await getDocs(collection(db, this.collectionName));
+                    this.locations = [];
+                    querySnapshot.forEach((doc) => {
+                        this.locations.push({ id: doc.id, ...doc.data() });
+                    });
+                    return this.locations;
                 } catch (error) {
-                    console.error('Error saving locations:', error);
-                    return false;
+                    console.error('Error loading locations from Firestore:', error);
+                    return [];
                 }
             }
 
             // CRUD Operations
-            getAllLocations() {
+            async getAllLocations() {
+                if (!this.initialized) await this.initialize();
                 return [...this.locations];
             }
 
-            getLocationById(id) {
+            async getLocationById(id) {
+                if (!this.initialized) await this.initialize();
                 return this.locations.find(loc => loc.id === id);
             }
 
-            createLocation(locationData) {
-                const newLocation = {
-                    id: locationData.id || 'loc_' + Date.now(),
-                    name: locationData.name || 'Unnamed Location',
-                    channelId: locationData.channelId || '',
-                    readKey: locationData.readKey || '',
-                    lastUpdate: null
-                };
-                this.locations.push(newLocation);
-                this.saveLocations();
-                return newLocation;
+            async createLocation(locationData) {
+                try {
+                    const { db, collection, addDoc } = window.firebase;
+                    const newLocation = {
+                        name: locationData.name || 'Unnamed Location',
+                        channelId: locationData.channelId || '',
+                        readKey: locationData.readKey || '',
+                        lastUpdate: null,
+                        createdAt: new Date()
+                    };
+
+                    const docRef = await addDoc(collection(db, this.collectionName), newLocation);
+                    const locationWithId = { id: docRef.id, ...newLocation };
+                    this.locations.push(locationWithId);
+                    return locationWithId;
+                } catch (error) {
+                    console.error('Error creating location:', error);
+                    throw error;
+                }
             }
 
-            updateLocation(id, updates) {
-                const index = this.locations.findIndex(loc => loc.id === id);
-                if (index >= 0) {
-                    this.locations[index] = { ...this.locations[index], ...updates };
-                    this.saveLocations();
-                    return this.locations[index];
+            async updateLocation(id, updates) {
+                try {
+                    const { db, doc, updateDoc } = window.firebase;
+                    const locationRef = doc(db, this.collectionName, id);
+                    await updateDoc(locationRef, {
+                        ...updates,
+                        updatedAt: new Date()
+                    });
+
+                    // Update local cache
+                    const index = this.locations.findIndex(loc => loc.id === id);
+                    if (index >= 0) {
+                        this.locations[index] = { ...this.locations[index], ...updates };
+                        return this.locations[index];
+                    }
+                    return null;
+                } catch (error) {
+                    console.error('Error updating location:', error);
+                    throw error;
                 }
-                return null;
             }
 
-            deleteLocation(id) {
-                const index = this.locations.findIndex(loc => loc.id === id);
-                if (index >= 0) {
-                    const deleted = this.locations.splice(index, 1)[0];
-                    this.saveLocations();
-                    return deleted;
+            async deleteLocation(id) {
+                try {
+                    const { db, doc, deleteDoc } = window.firebase;
+                    await deleteDoc(doc(db, this.collectionName, id));
+
+                    // Update local cache
+                    const index = this.locations.findIndex(loc => loc.id === id);
+                    if (index >= 0) {
+                        const deleted = this.locations.splice(index, 1)[0];
+                        return deleted;
+                    }
+                    return null;
+                } catch (error) {
+                    console.error('Error deleting location:', error);
+                    throw error;
                 }
-                return null;
             }
 
             // Utility functions
-            exportToJSON() {
-                return JSON.stringify(this.locations, null, 2);
+            async exportToJSON() {
+                const locations = await this.getAllLocations();
+                return JSON.stringify(locations, null, 2);
             }
 
-            importFromJSON(jsonString) {
+            async importFromJSON(jsonString) {
                 try {
                     const imported = JSON.parse(jsonString);
                     if (Array.isArray(imported)) {
-                        this.locations = imported;
-                        this.saveLocations();
+                        // Clear existing locations and add imported ones
+                        for (const location of imported) {
+                            await this.createLocation(location);
+                        }
                         return true;
                     }
                     return false;
@@ -104,9 +168,13 @@
                 }
             }
 
-            resetToDefaults() {
-                this.locations = [...this.defaultLocations];
-                this.saveLocations();
+            async resetToDefaults() {
+                // This would clear all locations in Firestore
+                const locations = await this.getAllLocations();
+                for (const location of locations) {
+                    await this.deleteLocation(location.id);
+                }
+                this.locations = [];
             }
 
             // Validation
@@ -125,67 +193,82 @@
             }
 
             // Bulk operations
-            createMultipleLocations(locationsArray) {
+            async createMultipleLocations(locationsArray) {
                 const results = [];
-                locationsArray.forEach(locData => {
+                for (const locData of locationsArray) {
                     const errors = this.validateLocationData(locData);
                     if (errors.length === 0) {
-                        results.push(this.createLocation(locData));
+                        try {
+                            const result = await this.createLocation(locData);
+                            results.push(result);
+                        } catch (error) {
+                            console.warn(`Error creating location: ${error.message}`);
+                        }
                     } else {
                         console.warn(`Skipping invalid location: ${errors.join(', ')}`);
                     }
-                });
+                }
                 return results;
             }
 
             // Search and filter
-            searchLocations(query) {
+            async searchLocations(query) {
+                const locations = await this.getAllLocations();
                 const lowercaseQuery = query.toLowerCase();
-                return this.locations.filter(loc =>
+                return locations.filter(loc =>
                     loc.name.toLowerCase().includes(lowercaseQuery) ||
                     loc.id.toLowerCase().includes(lowercaseQuery)
                 );
             }
 
-            getConfiguredLocations() {
-                return this.locations.filter(loc => loc.channelId && loc.readKey);
+            async getConfiguredLocations() {
+                const locations = await this.getAllLocations();
+                return locations.filter(loc => loc.channelId && loc.readKey);
             }
 
-            getUnconfiguredLocations() {
-                return this.locations.filter(loc => !loc.channelId || !loc.readKey);
+            async getUnconfiguredLocations() {
+                const locations = await this.getAllLocations();
+                return locations.filter(loc => !loc.channelId || !loc.readKey);
             }
         }
 
         // Global instance for easy access
         const locationManager = new LocationManager();
 
-        // Command-line style functions for direct use
-        function createLocation(name, channelId = '', readKey = '') {
-            return locationManager.createLocation({ name, channelId, readKey });
+        // Initialize the location manager
+        locationManager.initialize().then(() => {
+            console.log('LocationManager initialized with Firestore');
+        }).catch(error => {
+            console.error('Failed to initialize LocationManager:', error);
+        });
+
+        // Command-line style functions for direct use (now async)
+        async function createLocation(name, channelId = '', readKey = '') {
+            return await locationManager.createLocation({ name, channelId, readKey });
         }
 
-        function getLocation(id) {
-            return locationManager.getLocationById(id);
+        async function getLocation(id) {
+            return await locationManager.getLocationById(id);
         }
 
-        function updateLocation(id, updates) {
-            return locationManager.updateLocation(id, updates);
+        async function updateLocation(id, updates) {
+            return await locationManager.updateLocation(id, updates);
         }
 
-        function deleteLocation(id) {
-            return locationManager.deleteLocation(id);
+        async function deleteLocation(id) {
+            return await locationManager.deleteLocation(id);
         }
 
-        function listLocations() {
-            return locationManager.getAllLocations();
+        async function listLocations() {
+            return await locationManager.getAllLocations();
         }
 
-        function exportLocations() {
-            return locationManager.exportToJSON();
+        async function exportLocations() {
+            return await locationManager.exportToJSON();
         }
 
-        function importLocations(jsonString) {
-            return locationManager.importFromJSON(jsonString);
+        async function importLocations(jsonString) {
+            return await locationManager.importFromJSON(jsonString);
         }
 
         // ThingSpeak integration helper
@@ -465,7 +548,7 @@
             modal.classList.add('flex');
         }
 
-        function saveSettings() {
+        async function saveSettings() {
             const id = document.getElementById('edit-id').value;
             const name = document.getElementById('loc-name-input').value.trim();
             const cId = document.getElementById('channel-id-input').value.trim();
@@ -491,21 +574,20 @@
             }
 
             const locationData = {
-                id: id,
                 name: name || 'Unnamed Location',
                 channelId: cId,
                 readKey: key
             };
 
-            const existingLocation = locationManager.getLocationById(id);
-
             try {
+                const existingLocation = await locationManager.getLocationById(id);
+
                 if(existingLocation) {
                     // Update existing location
-                    locationManager.updateLocation(id, locationData);
+                    await locationManager.updateLocation(id, locationData);
                 } else {
                     // Create new location
-                    locationManager.createLocation(locationData);
+                    await locationManager.createLocation(locationData);
                 }
 
                 // Close modal
@@ -513,7 +595,7 @@
                 document.getElementById('settings-modal').classList.remove('flex');
 
                 // Reload dashboard with updated data
-                init();
+                await init();
             } catch (error) {
                 console.error('Error saving location:', error);
                 alert('Error saving location. Please try again.');
@@ -758,7 +840,7 @@
         });
 
         // --- Start App ---
-        function init() {
+        async function init() {
             const locationId = getLocationIdFromUrl();
             if (!locationId) {
                 // No location specified, redirect to home
@@ -766,7 +848,7 @@
                 return;
             }
 
-            const loc = locationManager.getLocationById(locationId);
+            const loc = await locationManager.getLocationById(locationId);
             if (!loc) {
                 // Location doesn't exist, redirect to home
                 window.location.href = '/';
