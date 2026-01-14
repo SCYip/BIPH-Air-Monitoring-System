@@ -151,16 +151,32 @@ pip3 install flask
 4. **Firestore Security Rules:**
    Add these rules in Firebase Console → Firestore → Rules:
 
+   **Important:** Use these **exact** rules (they include the proper syntax):
+
    ```
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
-       match /locations/{locationId} {
-         allow read, write: if true;  // For demo - restrict in production
+       match /{document=**} {
+         allow read, write: if true;
        }
      }
    }
    ```
+
+   **Alternative (more specific):**
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /locations/{document} {
+         allow read, write: if true;
+       }
+     }
+   }
+   ```
+
+   **Note:** Make sure the closing braces are properly matched. The error you're seeing suggests a missing `}` at the end.
 
 ## How to Run
 
