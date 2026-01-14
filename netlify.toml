@@ -1,0 +1,13 @@
+[build]
+  publish = "."
+
+# Redirect rules for SPA-like behavior
+[[redirects]]
+  from = "/dashboard/*"
+  to = "/dashboard.html"
+  status = 200
+
+[[redirects]]
+  from = "/api/*"
+  to = "/api/:splat"
+  status = 200
