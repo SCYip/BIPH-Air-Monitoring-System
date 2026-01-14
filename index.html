@@ -59,15 +59,24 @@
             // Load locations from Firestore
             async loadLocations() {
                 try {
+                    console.log('🔄 Loading locations from Firestore...');
                     const { db, collection, getDocs } = window.firebase;
+
+                    if (!db) {
+                        throw new Error('Firebase db not available');
+                    }
+
                     const querySnapshot = await getDocs(collection(db, this.collectionName));
                     this.locations = [];
                     querySnapshot.forEach((doc) => {
                         this.locations.push({ id: doc.id, ...doc.data() });
                     });
+
+                    console.log(`✅ Loaded ${this.locations.length} locations from Firestore`);
                     return this.locations;
                 } catch (error) {
-                    console.error('Error loading locations from Firestore:', error);
+                    console.error('❌ Error loading locations from Firestore:', error);
+                    console.error('Error details:', error.message);
                     return [];
                 }
             }
@@ -236,11 +245,12 @@
 
         // Initialize the location manager
         locationManager.initialize().then(() => {
-            console.log('LocationManager initialized with Firestore');
+            console.log('✅ LocationManager initialized with Firestore');
             // Load initial data
             init();
         }).catch(error => {
-            console.error('Failed to initialize LocationManager:', error);
+            console.error('❌ Failed to initialize LocationManager:', error);
+            alert('Database connection failed. Check Firebase configuration and Firestore rules.');
             // Fallback to empty state
             init();
         });
@@ -294,6 +304,19 @@
             }
         }
 
+        // Database connection test
+        async function testDatabaseConnection() {
+            try {
+                console.log('🧪 Testing database connection...');
+                const locations = await locationManager.getAllLocations();
+                console.log('✅ Database connection successful. Locations:', locations.length);
+                return { success: true, locations: locations.length };
+            } catch (error) {
+                console.error('❌ Database connection failed:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
         // Make functions available globally
         window.LocationManager = LocationManager;
         window.locationManager = locationManager;
@@ -305,6 +328,7 @@
         window.exportLocations = exportLocations;
         window.importLocations = importLocations;
         window.testThingSpeakConnection = testThingSpeakConnection;
+        window.testDatabaseConnection = testDatabaseConnection;
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
@@ -477,17 +501,22 @@
             if (locations.length === 0) {
                 grid.innerHTML = `
                     <div class="col-span-full flex flex-col items-center justify-center py-16 px-6 text-center">
-                        <div class="bg-slate-100 rounded-full p-6 mb-6">
-                            <i class="fa-solid fa-location-dot text-4xl text-slate-400"></i>
-                        </div>
-                        <h3 class="text-xl font-semibold text-slate-900 mb-2">No Locations Added Yet</h3>
-                        <p class="text-slate-500 mb-6 max-w-md">
-                            Add your first air quality monitoring location to get started.
-                            You'll need a ThingSpeak channel ID and read API key.
-                        </p>
+                    <div class="bg-slate-100 rounded-full p-6 mb-6">
+                        <i class="fa-solid fa-location-dot text-4xl text-slate-400"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-slate-900 mb-2">No Locations Added Yet</h3>
+                    <p class="text-slate-500 mb-4 max-w-md">
+                        Add your first air quality monitoring location to get started.
+                        You'll need a ThingSpeak channel ID and read API key.
+                    </p>
+                    <div class="flex gap-3 mb-4">
                         <button onclick="createNewLocation()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm">
                             <i class="fa-solid fa-plus mr-2"></i> Add Your First Location
                         </button>
+                        <button onclick="testDatabaseConnection().then(result => alert(result.success ? '✅ Database OK: ' + result.locations + ' locations' : '❌ Database Error: ' + result.error))" class="bg-slate-500 hover:bg-slate-600 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm">
+                            <i class="fa-solid fa-database mr-2"></i> Test Database
+                        </button>
+                    </div>
                     </div>
                 `;
                 return;

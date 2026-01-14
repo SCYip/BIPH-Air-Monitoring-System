@@ -283,6 +283,19 @@
             }
         }
 
+        // Database connection test
+        async function testDatabaseConnection() {
+            try {
+                console.log('🧪 Testing database connection from dashboard...');
+                const locations = await locationManager.getAllLocations();
+                console.log('✅ Database connection successful. Locations:', locations.length);
+                return { success: true, locations: locations.length };
+            } catch (error) {
+                console.error('❌ Database connection failed:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
         // Make functions available globally
         window.LocationManager = LocationManager;
         window.locationManager = locationManager;
@@ -294,6 +307,7 @@
         window.exportLocations = exportLocations;
         window.importLocations = importLocations;
         window.testThingSpeakConnection = testThingSpeakConnection;
+        window.testDatabaseConnection = testDatabaseConnection;
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
@@ -341,6 +355,10 @@
 
                     <button id="settings-btn" onclick="toggleSettings()" class="text-slate-500 hover:text-slate-700 transition-colors p-2 rounded-full hover:bg-slate-100" title="Settings">
                         <i class="fa-solid fa-gear text-lg"></i>
+                    </button>
+
+                    <button onclick="testDatabaseConnection().then(result => alert(result.success ? '✅ Database OK: ' + result.locations + ' locations' : '❌ Database Error: ' + result.error))" class="text-slate-500 hover:text-slate-700 transition-colors p-2 rounded-full hover:bg-slate-100" title="Test Database">
+                        <i class="fa-solid fa-database text-lg"></i>
                     </button>
                 </div>
             </div>
@@ -835,25 +853,33 @@
         async function init() {
             // Initialize LocationManager first
             try {
+                console.log('🔄 Initializing LocationManager...');
                 await locationManager.initialize();
-                console.log('LocationManager initialized with Firestore');
+                console.log('✅ LocationManager initialized with Firestore');
             } catch (error) {
-                console.error('Failed to initialize LocationManager:', error);
+                console.error('❌ Failed to initialize LocationManager:', error);
+                alert('Database connection failed. Check Firebase configuration.');
                 window.location.href = '/';
                 return;
             }
 
             const locationId = getLocationIdFromUrl();
+            console.log('📍 Location ID from URL:', locationId);
+
             if (!locationId) {
                 // No location specified, redirect to home
+                console.error('❌ No location ID in URL');
                 window.location.href = '/';
                 return;
             }
 
             const loc = await locationManager.getLocationById(locationId);
+            console.log('🔍 Location lookup result:', loc);
+
             if (!loc) {
                 // Location doesn't exist, redirect to home
-                console.error('Location not found:', locationId);
+                console.error('❌ Location not found in database:', locationId);
+                alert('Location not found in database. It may have been deleted.');
                 window.location.href = '/';
                 return;
             }
