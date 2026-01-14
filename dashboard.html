@@ -234,13 +234,6 @@
         // Global instance for easy access
         const locationManager = new LocationManager();
 
-        // Initialize the location manager
-        locationManager.initialize().then(() => {
-            console.log('LocationManager initialized with Firestore');
-        }).catch(error => {
-            console.error('Failed to initialize LocationManager:', error);
-        });
-
         // Command-line style functions for direct use (now async)
         async function createLocation(name, channelId = '', readKey = '') {
             return await locationManager.createLocation({ name, channelId, readKey });
@@ -840,6 +833,16 @@
 
         // --- Start App ---
         async function init() {
+            // Initialize LocationManager first
+            try {
+                await locationManager.initialize();
+                console.log('LocationManager initialized with Firestore');
+            } catch (error) {
+                console.error('Failed to initialize LocationManager:', error);
+                window.location.href = '/';
+                return;
+            }
+
             const locationId = getLocationIdFromUrl();
             if (!locationId) {
                 // No location specified, redirect to home
@@ -850,6 +853,7 @@
             const loc = await locationManager.getLocationById(locationId);
             if (!loc) {
                 // Location doesn't exist, redirect to home
+                console.error('Location not found:', locationId);
                 window.location.href = '/';
                 return;
             }
