@@ -25,12 +25,25 @@
             measurementId: "G-YT0SXNDC10"
         };
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        try {
+            console.log('🔄 [Dashboard] Initializing Firebase...');
+            // Initialize Firebase
+            const app = initializeApp(firebaseConfig);
+            console.log('✅ [Dashboard] Firebase app initialized');
 
-        // Make Firebase available globally
-        window.firebase = { db, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where };
+            const db = getFirestore(app);
+            console.log('✅ [Dashboard] Firestore initialized');
+
+            // Make Firebase available globally
+            window.firebase = { db, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where };
+            console.log('✅ [Dashboard] Firebase SDK ready for use');
+
+        } catch (error) {
+            console.error('❌ [Dashboard] Firebase initialization failed:', error);
+            console.error('Error details:', error.message);
+            console.error('Error code:', error.code);
+            alert('Firebase initialization failed: ' + error.message);
+        }
     </script>
     <script>
         /**

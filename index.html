@@ -25,12 +25,29 @@
             measurementId: "G-YT0SXNDC10"
         };
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        try {
+            console.log('🔄 Initializing Firebase...');
+            // Initialize Firebase
+            const app = initializeApp(firebaseConfig);
+            console.log('✅ Firebase app initialized');
 
-        // Make Firebase available globally
-        window.firebase = { db, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where };
+            const db = getFirestore(app);
+            console.log('✅ Firestore initialized');
+
+            // Test the connection
+            console.log('🧪 Testing Firestore connection...');
+            // This will fail if rules are wrong, but at least we know Firebase initialized
+
+            // Make Firebase available globally
+            window.firebase = { db, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where };
+            console.log('✅ Firebase SDK ready for use');
+
+        } catch (error) {
+            console.error('❌ Firebase initialization failed:', error);
+            console.error('Error details:', error.message);
+            console.error('Error code:', error.code);
+            alert('Firebase initialization failed: ' + error.message);
+        }
     </script>
     <script>
         /**
@@ -250,7 +267,9 @@
             init();
         }).catch(error => {
             console.error('❌ Failed to initialize LocationManager:', error);
-            alert('Database connection failed. Check Firebase configuration and Firestore rules.');
+            console.error('Error code:', error.code);
+            console.error('Error details:', error.message);
+            alert(`Database connection failed!\n\nError: ${error.message}\n\nCheck:\n1. Firebase project is active\n2. Firestore is enabled\n3. Security rules allow access\n4. Internet connection`);
             // Fallback to empty state
             init();
         });
@@ -304,18 +323,59 @@
             }
         }
 
+        // Firebase status check
+        function checkFirebaseStatus() {
+            if (!window.firebase) {
+                return { ready: false, error: 'Firebase SDK not loaded' };
+            }
+            if (!window.firebase.db) {
+                return { ready: false, error: 'Firestore not initialized' };
+            }
+            return { ready: true, message: 'Firebase ready' };
+        }
+
         // Database connection test
         async function testDatabaseConnection() {
             try {
                 console.log('🧪 Testing database connection...');
+
+                // First check if Firebase is ready
+                const firebaseStatus = checkFirebaseStatus();
+                if (!firebaseStatus.ready) {
+                    console.error('❌ Firebase not ready:', firebaseStatus.error);
+                    return { success: false, error: firebaseStatus.error };
+                }
+
                 const locations = await locationManager.getAllLocations();
                 console.log('✅ Database connection successful. Locations:', locations.length);
                 return { success: true, locations: locations.length };
             } catch (error) {
                 console.error('❌ Database connection failed:', error);
-                return { success: false, error: error.message };
+                console.error('Error code:', error.code);
+                console.error('Error details:', error.message);
+                return { success: false, error: error.message, code: error.code };
             }
         }
+
+        // Manual Firebase diagnostics (call from console)
+        window.diagnoseFirebase = async function() {
+            console.log('🔍 Firebase Diagnostics:');
+            console.log('1. Firebase SDK loaded:', !!window.firebase);
+            console.log('2. Firebase config:', firebaseConfig);
+            console.log('3. Firestore ready:', !!window.firebase?.db);
+
+            try {
+                const { db, collection, getDocs } = window.firebase;
+                console.log('4. Testing Firestore read...');
+                const testQuery = await getDocs(collection(db, 'locations'));
+                console.log('✅ Firestore read successful. Documents:', testQuery.size);
+                return 'Firebase working correctly';
+            } catch (error) {
+                console.error('❌ Firestore test failed:', error);
+                console.error('Error code:', error.code);
+                return `Firebase error: ${error.message}`;
+            }
+        };
 
         // Make functions available globally
         window.LocationManager = LocationManager;
@@ -329,6 +389,7 @@
         window.importLocations = importLocations;
         window.testThingSpeakConnection = testThingSpeakConnection;
         window.testDatabaseConnection = testDatabaseConnection;
+        window.diagnoseFirebase = diagnoseFirebase;
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
