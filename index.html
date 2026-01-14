@@ -260,18 +260,14 @@
         // Global instance for easy access
         const locationManager = new LocationManager();
 
-        // Initialize the location manager
+        // Initialize the location manager (do not call app init here; app initialization is performed at the end of the script)
         locationManager.initialize().then(() => {
             console.log('✅ LocationManager initialized with Firestore');
-            // Load initial data
-            init();
         }).catch(error => {
             console.error('❌ Failed to initialize LocationManager:', error);
             console.error('Error code:', error.code);
             console.error('Error details:', error.message);
             alert(`Database connection failed!\n\nError: ${error.message}\n\nCheck:\n1. Firebase project is active\n2. Firestore is enabled\n3. Security rules allow access\n4. Internet connection`);
-            // Fallback to empty state
-            init();
         });
 
         // Command-line style functions for direct use (now async)
