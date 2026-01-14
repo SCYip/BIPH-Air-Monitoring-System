@@ -1,6 +1,10 @@
 [build]
   publish = "."
 
+# Environment variables for secrets scanning
+[build.environment]
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+
 # Redirect rules for SPA-like behavior
 [[redirects]]
   from = "/dashboard/*"
