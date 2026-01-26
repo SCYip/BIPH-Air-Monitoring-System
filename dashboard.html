@@ -836,6 +836,7 @@
         function processFeeds(feeds) {
             const labels = [];
             const co2Data = [];
+            const tempData = [];
             const humData = [];
 
             feeds.forEach(feed => {
@@ -844,9 +845,9 @@
                     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     labels.push(timeStr);
                     co2Data.push(parseFloat(feed.field1));
-                    // Prefer field3 for humidity if available, fallback to field2
-                    const humVal = (feed.field3 !== undefined && feed.field3 !== null) ? feed.field3 : feed.field2;
-                    humData.push(humVal !== null ? parseFloat(humVal) : NaN);
+                    // field2 = Temperature, field3 = Humidity
+                    tempData.push(feed.field2 !== null && feed.field2 !== undefined ? parseFloat(feed.field2) : NaN);
+                    humData.push(feed.field3 !== null && feed.field3 !== undefined ? parseFloat(feed.field3) : NaN);
                 }
             });
 
@@ -860,9 +861,12 @@
             co2Chart.data.datasets[0].data = co2Data;
             humidityChart.data.labels = labels;
             humidityChart.data.datasets[0].data = humData;
+            tempChart.data.labels = labels;
+            tempChart.data.datasets[0].data = tempData;
 
             co2Chart.update();
             humidityChart.update();
+            tempChart.update();
         }
 
         function updateDashboard(co2, temp, hum, timestamp) {
