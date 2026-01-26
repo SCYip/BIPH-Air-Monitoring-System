@@ -1060,6 +1060,12 @@
             // Set Titles
             document.getElementById('dash-title').innerText = loc.name;
             document.getElementById('dash-subtitle').innerText = `ID: ${loc.channelId || 'Not Configured'}`;
+            // Update document title to include location name
+            try {
+                document.title = `${loc.name} — CampusAirGuard Dashboard`;
+            } catch (e) {
+                console.warn('Could not set document.title', e);
+            }
 
             // Reset Charts & UI
             clearCharts();
