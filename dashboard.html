@@ -846,8 +846,8 @@
                     labels.push(timeStr);
                     co2Data.push(parseFloat(feed.field1));
                     // field2 = Temperature, field3 = Humidity
-                    tempData.push(feed.field2 !== null && feed.field2 !== undefined ? parseFloat(feed.field2) : NaN);
-                    humData.push(feed.field3 !== null && feed.field3 !== undefined ? parseFloat(feed.field3) : NaN);
+                    tempData.push(feed.field2 !== null && feed.field2 !== undefined ? parseFloat(feed.field2) : null);
+                    humData.push(feed.field3 !== null && feed.field3 !== undefined ? parseFloat(feed.field3) : null);
                 }
             });
 
@@ -870,57 +870,76 @@
         }
 
         function updateDashboard(co2, temp, hum, timestamp) {
-            if (co2 == null || temp == null || hum == null) return;
-
-            const co2Val = Math.round(co2);
-            const tempVal = Math.round(temp);
-            const humVal = Math.round(hum);
-
-            document.getElementById('co2-value').innerText = co2Val;
-            document.getElementById('temp-value').innerText = tempVal;
-            document.getElementById('humidity-value').innerText = humVal;
-
-            const date = new Date(timestamp);
-            document.getElementById('last-update-time').innerText = date.toLocaleTimeString();
-
-            // CO2 Logic
-            const co2Bar = document.getElementById('co2-bar');
-            const co2Ind = document.getElementById('co2-indicator');
-            const co2Text = document.getElementById('co2-status-text');
-            const co2Percent = Math.min(100, (co2Val / 2000) * 100);
-            co2Bar.style.width = `${co2Percent}%`;
-
-            if (co2Val < 800) {
-                co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-green-100 text-green-600";
-                co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-green-500";
-                co2Text.innerText = "Excellent Quality";
-                co2Text.className = "text-green-600 font-bold";
-            } else if (co2Val < 1200) {
-                co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-yellow-100 text-yellow-600";
-                co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-yellow-500";
-                co2Text.innerText = "Moderate Quality";
-                co2Text.className = "text-yellow-600 font-bold";
-            } else {
-                co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-red-100 text-red-600";
-                co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-red-500";
-                co2Text.innerText = "Poor Quality (Ventilate)";
-                co2Text.className = "text-red-600 font-bold";
+            // Update last-update time if provided
+            if (timestamp) {
+                const date = new Date(timestamp);
+                document.getElementById('last-update-time').innerText = date.toLocaleTimeString();
             }
 
-            // Humidity Logic
-            const humBar = document.getElementById('humidity-bar');
-            const humInd = document.getElementById('humidity-indicator');
-            const humText = document.getElementById('humidity-status-text');
-            humBar.style.width = `${humVal}%`;
+            // Update CO2 if provided
+            if (co2 !== null && co2 !== undefined) {
+                const co2Val = Math.round(co2);
+                document.getElementById('co2-value').innerText = co2Val;
+                const co2Bar = document.getElementById('co2-bar');
+                const co2Ind = document.getElementById('co2-indicator');
+                const co2Text = document.getElementById('co2-status-text');
+                const co2Percent = Math.min(100, (co2Val / 2000) * 100);
+                co2Bar.style.width = `${co2Percent}%`;
 
-            if (humVal >= 30 && humVal <= 60) {
-                humInd.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-blue-100 text-blue-600";
-                humText.innerText = "Comfortable";
-                humText.className = "text-blue-600 font-bold";
-            } else {
-                humInd.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-orange-100 text-orange-600";
-                humText.innerText = humVal < 30 ? "Dry Air" : "High Humidity";
-                humText.className = "text-orange-600 font-bold";
+                if (co2Val < 800) {
+                    co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-green-100 text-green-600";
+                    co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-green-500";
+                    co2Text.innerText = "Excellent Quality";
+                    co2Text.className = "text-green-600 font-bold";
+                } else if (co2Val < 1200) {
+                    co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-yellow-100 text-yellow-600";
+                    co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-yellow-500";
+                    co2Text.innerText = "Moderate Quality";
+                    co2Text.className = "text-yellow-600 font-bold";
+                } else {
+                    co2Ind.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-red-100 text-red-600";
+                    co2Bar.className = "h-2 rounded-full transition-all duration-1000 bg-red-500";
+                    co2Text.innerText = "Poor Quality (Ventilate)";
+                    co2Text.className = "text-red-600 font-bold";
+                }
+            }
+
+            // Update Temperature if provided
+            if (temp !== null && temp !== undefined && !isNaN(temp)) {
+                const tempVal = Math.round(temp);
+                document.getElementById('temp-value').innerText = tempVal;
+                const tempBar = document.getElementById('temp-bar');
+                const tempText = document.getElementById('temp-status-text');
+                // scale temp for bar width (approx between -10 to 50)
+                const percent = Math.min(100, Math.max(0, ((tempVal + 10) / 60) * 100));
+                tempBar.style.width = `${percent}%`;
+                if (tempVal >= 18 && tempVal <= 26) {
+                    tempText.innerText = "Comfortable";
+                    tempText.className = "text-green-600 font-bold";
+                } else {
+                    tempText.innerText = tempVal < 18 ? "Cool" : "Warm";
+                    tempText.className = "text-orange-600 font-bold";
+                }
+            }
+
+            // Update Humidity if provided
+            if (hum !== null && hum !== undefined && !isNaN(hum)) {
+                const humVal = Math.round(hum);
+                document.getElementById('humidity-value').innerText = humVal;
+                const humBar = document.getElementById('humidity-bar');
+                const humInd = document.getElementById('humidity-indicator');
+                const humText = document.getElementById('humidity-status-text');
+                humBar.style.width = `${humVal}%`;
+
+                if (humVal >= 30 && humVal <= 60) {
+                    humInd.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-blue-100 text-blue-600";
+                    humText.innerText = "Comfortable";
+                    humText.className = "text-blue-600 font-bold";
+                } else {
+                    humInd.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-orange-100 text-orange-600";
+                    humText.innerText = humVal < 30 ? "Dry Air" : "High Humidity";
+                    humText.className = "text-orange-600 font-bold";
+                }
             }
         }
 
