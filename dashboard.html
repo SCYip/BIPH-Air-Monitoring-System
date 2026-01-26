@@ -700,25 +700,49 @@
         };
 
         const co2Ctx = document.getElementById('co2Chart').getContext('2d');
-        const co2Chart = new Chart(co2Ctx, {
+        let co2Chart = new Chart(co2Ctx, {
             type: 'line',
             data: { labels: [], datasets: [{ data: [], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }] },
             options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: 300, suggestedMax: 1000 } } }
         });
 
         const humCtx = document.getElementById('humidityChart').getContext('2d');
-        const humidityChart = new Chart(humCtx, {
+        let humidityChart = new Chart(humCtx, {
             type: 'line',
             data: { labels: [], datasets: [{ data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true }] },
             options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: 0, suggestedMax: 100 } } }
         });
 
         const tempCtx = document.getElementById('tempChart').getContext('2d');
-        const tempChart = new Chart(tempCtx, {
+        let tempChart = new Chart(tempCtx, {
             type: 'line',
             data: { labels: [], datasets: [{ data: [], borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.08)', fill: true }] },
             options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: -10, suggestedMax: 50 } } }
         });
+        
+        // Helper to compute min/max with padding
+        function computeRange(dataArray, paddingRatio = 0.1, clampMin = undefined, clampMax = undefined) {
+            const nums = (dataArray || []).filter(v => v !== null && v !== undefined && !isNaN(v)).map(Number);
+            if (!nums.length) return null;
+            let min = Math.min(...nums);
+            let max = Math.max(...nums);
+            let padding = (max - min) * paddingRatio;
+            if (padding === 0) padding = 1;
+            let outMin = typeof clampMin === 'number' ? Math.max(clampMin, min - padding) : min - padding;
+            let outMax = typeof clampMax === 'number' ? Math.min(clampMax, max + padding) : max + padding;
+            if (outMin >= outMax) { outMin = min - 1; outMax = max + 1; }
+            return { min: outMin, max: outMax };
+        }
+
+        // Rebuild a line chart to avoid resolver/scriptable issues when changing scales
+        function rebuildLineChart(oldChart, ctx, labels, dataArray, color, bgColor, yRange) {
+            try { if (oldChart) oldChart.destroy(); } catch(e){ console.warn('destroy chart failed', e); }
+            return new Chart(ctx, {
+                type: 'line',
+                data: { labels: labels, datasets: [{ data: dataArray, borderColor: color, backgroundColor: bgColor, fill: true }] },
+                options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: yRange ? yRange.min : undefined, suggestedMax: yRange ? yRange.max : undefined } } }
+            });
+        }
 
         // Adjust y-axis scale dynamically based on dataset values (with padding and optional clamps)
         function adjustYAxis(chart, dataArray, options = {}) {
@@ -889,21 +913,15 @@
                 updateDashboard(latest.field1, latest.field2, latest.field3, latest.created_at);
             }
 
-            co2Chart.data.labels = labels;
-            co2Chart.data.datasets[0].data = co2Data;
-            tempChart.data.labels = labels;
-            tempChart.data.datasets[0].data = tempData;
-            humidityChart.data.labels = labels;
-            humidityChart.data.datasets[0].data = humData;
+            // Compute ranges
+            const co2Range = computeRange(co2Data, 0.12, 0, undefined);
+            const tempRange = computeRange(tempData, 0.12, -10, 50);
+            const humRange = computeRange(humData, 0.08, 0, 100);
 
-            // Auto-scale Y axes for better zoomed-in view
-            adjustYAxis(co2Chart, co2Data, { paddingRatio: 0.12, clampMin: 0 });
-            adjustYAxis(tempChart, tempData, { paddingRatio: 0.12, clampMin: -10, clampMax: 50 });
-            adjustYAxis(humidityChart, humData, { paddingRatio: 0.08, clampMin: 0, clampMax: 100 });
-
-            co2Chart.update();
-            tempChart.update();
-            humidityChart.update();
+            // Rebuild charts with updated ranges (safe against Chart.js resolvers)
+            co2Chart = rebuildLineChart(co2Chart, co2Ctx, labels, co2Data, '#10b981', 'rgba(16, 185, 129, 0.1)', co2Range);
+            tempChart = rebuildLineChart(tempChart, tempCtx, labels, tempData, '#f97316', 'rgba(249, 115, 22, 0.08)', tempRange);
+            humidityChart = rebuildLineChart(humidityChart, humCtx, labels, humData, '#3b82f6', 'rgba(59, 130, 246, 0.1)', humRange);
         }
 
         function updateDashboard(co2, temp, hum, timestamp) {
