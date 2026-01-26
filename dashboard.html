@@ -725,8 +725,10 @@
         async function fetchData() {
             if(!currentLocId || isLoading) return;
 
-            const loc = locationManager.getLocationById(currentLocId);
+            // Get latest location object from manager (async)
+            const loc = await locationManager.getLocationById(currentLocId);
             if (!loc || !loc.channelId || !loc.readKey) {
+                console.warn('fetchData: location not configured or missing credentials', loc);
                 updateStatus('offline');
                 return;
             }
@@ -736,13 +738,19 @@
 
             try {
                 const url = `https://api.thingspeak.com/channels/${loc.channelId}/feeds.json?api_key=${loc.readKey}&results=20`;
+                console.log('Fetching ThingSpeak URL:', url);
+
                 const response = await fetch(url);
+                console.log('ThingSpeak response status:', response.status, response.statusText);
 
                 if (!response.ok) {
+                    const text = await response.text().catch(()=>'<no body>');
+                    console.error('ThingSpeak response not ok, body:', text);
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
                 const data = await response.json();
+                console.log('ThingSpeak data received. feeds length:', data.feeds ? data.feeds.length : 0);
 
                 if (data.feeds && data.feeds.length > 0) {
                     // Stale check (5 mins)
@@ -757,6 +765,17 @@
                     }
 
                     processFeeds(data.feeds);
+                    // Save latest feed time to Firestore so home cards show last update
+                    try {
+                        const latestFeed = data.feeds[data.feeds.length - 1];
+                        if (latestFeed && latestFeed.created_at) {
+                            // lastUpdate is an ISO timestamp string from ThingSpeak
+                            await locationManager.updateLocation(currentLocId, { lastUpdate: latestFeed.created_at });
+                            console.log('Saved lastUpdate to Firestore:', latestFeed.created_at);
+                        }
+                    } catch (e) {
+                        console.warn('Could not save lastUpdate to Firestore:', e);
+                    }
                 } else {
                     updateStatus('online'); // Connected, just empty
                     document.getElementById('co2-status-text').innerText = "Channel Empty";

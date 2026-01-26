@@ -631,6 +631,7 @@
                     </div>
                     <div class="text-xs text-slate-400 border-t pt-3 flex justify-between">
                         <span>Channel: ${loc.channelId || '---'}</span>
+                        <span>${loc.lastUpdate ? ('Last: ' + new Date(loc.lastUpdate).toLocaleString()) : ''}</span>
                         <span class="text-blue-600 font-medium">View Data &rarr;</span>
                     </div>
                 `;
