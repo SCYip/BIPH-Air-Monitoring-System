@@ -361,7 +361,7 @@
                     <div class="bg-blue-600 text-white p-2 rounded-lg">
                         <i class="fa-solid fa-wind"></i>
                     </div>
-                    <span class="font-bold text-xl tracking-tight text-slate-900">CampusAir<span class="text-blue-600">Guard</span></span>
+                    <span id="brand-title" class="font-bold text-xl tracking-tight text-slate-900">CampusAir<span class="text-blue-600">Guard</span></span>
                 </div>
                 <div class="flex items-center gap-4">
                     <!-- Status Badge (Always visible in Dashboard) -->
@@ -1065,6 +1065,13 @@
                 document.title = `${loc.name} — CampusAirGuard Dashboard`;
             } catch (e) {
                 console.warn('Could not set document.title', e);
+            }
+            // Update navbar brand to location name
+            try {
+                const brandEl = document.getElementById('brand-title');
+                if (brandEl) brandEl.innerText = loc.name;
+            } catch (e) {
+                console.warn('Could not update navbar brand', e);
             }
 
             // Reset Charts & UI
