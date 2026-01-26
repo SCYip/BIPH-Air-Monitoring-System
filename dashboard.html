@@ -508,15 +508,19 @@
                 </div>
             </div>
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <div class="mb-4">
+                <div class="mb-4 flex items-center justify-between">
                     <h3 class="font-bold text-slate-800">Temperature History (Today)</h3>
+                    <button onclick="resetChart('temp')" class="px-2 py-1 bg-slate-100 rounded text-sm">Reset</button>
                 </div>
                 <div class="relative h-64 w-full">
                     <canvas id="tempChart" data-chart="temp"></canvas>
                 </div>
             </div>
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <h3 class="font-bold text-slate-800 mb-4">Humidity History (Today)</h3>
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="font-bold text-slate-800">Humidity History (Today)</h3>
+                    <button onclick="resetChart('hum')" class="px-2 py-1 bg-slate-100 rounded text-sm">Reset</button>
+                </div>
                 <div class="relative h-64 w-full">
                     <canvas id="humidityChart" data-chart="hum"></canvas>
                 </div>
@@ -754,7 +758,7 @@
                         },
                         zoom: {
                             pan: { enabled: true, mode: 'x', modifierKey: null },
-                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, drag: { enabled: false }, mode: 'x' }
                         }
                     }
                 }
@@ -817,6 +821,101 @@
             return createChartInstance(ctx, points, color, bgColor, yRange, xRange);
         }
 
+        // Reset a specific chart's zoom to full day
+        function resetChart(key) {
+            const state = chartState[key];
+            if (!state || !state.chart) return;
+            try {
+                if (state.todayRange) {
+                    state.chart.options.scales.x.min = state.todayRange.minMs;
+                    state.chart.options.scales.x.max = state.todayRange.maxMs;
+                } else {
+                    state.chart.options.scales.x.min = undefined;
+                    state.chart.options.scales.x.max = undefined;
+                }
+                state.chart.resetZoom && state.chart.resetZoom();
+                state.chart.update();
+            } catch (e) {
+                console.warn('resetChart failed', e);
+            }
+        }
+
+        // Attach pointer drag pan to charts (independent per-chart)
+        function attachPanHandlers() {
+            Object.keys(chartState).forEach(key => {
+                const state = chartState[key];
+                if (!state || !state.chart) return;
+                const canvas = state.chart.canvas;
+                if (!canvas) return;
+                // cleanup existing
+                if (canvas._panCleanup) {
+                    try { canvas._panCleanup(); } catch(_) {}
+                    delete canvas._panCleanup;
+                }
+
+                let dragging = false;
+                let startX = 0;
+                let startMin = null;
+                let startMax = null;
+
+                const onPointerDown = (e) => {
+                    dragging = true;
+                    startX = e.clientX;
+                    // determine current min/max
+                    const optsX = state.chart.options && state.chart.options.scales && state.chart.options.scales.x;
+                    if (optsX && typeof optsX.min === 'number' && typeof optsX.max === 'number') {
+                        startMin = optsX.min;
+                        startMax = optsX.max;
+                    } else {
+                        // compute from data
+                        const all = (state.chart.data && state.chart.data.datasets && state.chart.data.datasets[0] && state.chart.data.datasets[0].data) || [];
+                        const xs = all.map(p => (p && p.x) || 0).filter(v => !isNaN(v));
+                        startMin = Math.min(...xs);
+                        startMax = Math.max(...xs);
+                    }
+                    state.isInteracting = true;
+                };
+
+                const onPointerMove = (e) => {
+                    if (!dragging) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const dx = e.clientX - startX;
+                    const range = startMax - startMin;
+                    if (!range) return;
+                    const deltaMs = (dx / rect.width) * range;
+                    let newMin = startMin - deltaMs;
+                    let newMax = startMax - deltaMs;
+                    if (state.todayRange) {
+                        newMin = Math.max(state.todayRange.minMs, Math.min(newMin, state.todayRange.maxMs - 1));
+                        newMax = Math.max(state.todayRange.minMs + 1, Math.min(newMax, state.todayRange.maxMs));
+                    }
+                    try {
+                        state.chart.options.scales.x.min = newMin;
+                        state.chart.options.scales.x.max = newMax;
+                        state.chart.update('none');
+                    } catch (err) {
+                        console.warn('pan update failed', err);
+                    }
+                };
+
+                const onPointerUp = (e) => {
+                    dragging = false;
+                    state.isInteracting = false;
+                };
+
+                canvas.addEventListener('pointerdown', onPointerDown);
+                canvas.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerUp);
+
+                canvas._panCleanup = () => {
+                    canvas.removeEventListener('pointerdown', onPointerDown);
+                    canvas.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerUp);
+                    delete canvas._panCleanup;
+                };
+            });
+        }
+
         // Apply window for a specific chart key (co2, temp, hum)
         function applyWindowFor(key) {
             const state = chartState[key];
@@ -834,6 +933,7 @@
 
             const vis = full.slice(state.start, state.start + state.size);
             const range = computeRange(vis, 0.12, state.clampMin, state.clampMax);
+            // Update chart in-place via rebuildLineChart which handles in-place updates
             state.chart = rebuildLineChart(state.chart, state.ctx, vis, state.color, state.bg, range, state.todayRange || null);
         }
 
@@ -1177,6 +1277,8 @@
                     }
                 }
             });
+            // Attach simple drag-pan handlers per-chart (fallback if plugin pan doesn't fire)
+            attachPanHandlers();
         }
 
         function updateDashboard(co2, temp, hum, timestamp) {
