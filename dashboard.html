@@ -776,8 +776,15 @@
                 // Prefer to get existing chart tied to the canvas (safer)
                 const existing = Chart.getChart(ctx.canvas);
                 if (existing) {
+                    // Update only dataset and axis ranges to avoid expensive recreation and flicker
                     try {
-                        existing.data = { datasets: [{ data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] };
+                        const ds = existing.data && existing.data.datasets && existing.data.datasets[0];
+                        if (ds) {
+                            ds.data = points || [];
+                        } else {
+                            existing.data = { datasets: [{ data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] };
+                        }
+
                         existing.options = existing.options || {};
                         existing.options.scales = existing.options.scales || {};
                         existing.options.scales.y = existing.options.scales.y || {};
@@ -785,15 +792,12 @@
                             existing.options.scales.y.suggestedMin = yRange.min;
                             existing.options.scales.y.suggestedMax = yRange.max;
                         }
-                        existing.options.scales.x = existing.options.scales.x || {};
-                        if (xRange) {
-                            existing.options.scales.x.min = xRange.minMs;
-                            existing.options.scales.x.max = xRange.maxMs;
-                        }
+
                         existing.update();
+                        try { existing.resize(); } catch (_) {}
                         return existing;
                     } catch (e) {
-                        console.warn('update existing chart failed, destroying and recreating', e);
+                        console.warn('update existing chart failed, will recreate', e);
                         try { existing.destroy(); } catch (e2) { /* ignore */ }
                     }
                 }
@@ -1193,9 +1197,10 @@
             chartState.temp.todayRange = todayRange;
             chartState.hum.todayRange = todayRange;
 
-            chartState.co2.start = 0; chartState.co2.size = chartState.co2.fullPoints.length;
-            chartState.temp.start = 0; chartState.temp.size = chartState.temp.fullPoints.length;
-            chartState.hum.start  = 0; chartState.hum.size  = chartState.hum.fullPoints.length;
+            // Preserve user zoom window if already set; otherwise default to full range
+            if (!chartState.co2.size || chartState.co2.size <= 0) { chartState.co2.start = 0; chartState.co2.size = chartState.co2.fullPoints.length; }
+            if (!chartState.temp.size || chartState.temp.size <= 0) { chartState.temp.start = 0; chartState.temp.size = chartState.temp.fullPoints.length; }
+            if (!chartState.hum.size  || chartState.hum.size  <= 0) { chartState.hum.start  = 0; chartState.hum.size  = chartState.hum.fullPoints.length; }
 
             // Choose latest feed to display in cards: prefer today's last feed, otherwise the last overall
             let latestFeed = null;
