@@ -829,23 +829,11 @@
             const state = chartState[key];
             if (!state || !state.chart) return;
             try {
-                // Always set x-axis to today's range if available, otherwise clear limits.
-                if (state.todayRange) {
-                    state.chart.options.scales = state.chart.options.scales || {};
-                    state.chart.options.scales.x = state.chart.options.scales.x || {};
-                    state.chart.options.scales.x.min = state.todayRange.minMs;
-                    state.chart.options.scales.x.max = state.todayRange.maxMs;
-                } else {
-                    if (state.chart.options && state.chart.options.scales && state.chart.options.scales.x) {
-                        delete state.chart.options.scales.x.min;
-                        delete state.chart.options.scales.x.max;
-                    }
-                }
-                // If plugin resetZoom exists, call it; otherwise do an update.
-                if (typeof state.chart.resetZoom === 'function') {
-                    try { state.chart.resetZoom(); } catch (_) { /* ignore */ }
-                }
-                state.chart.update();
+                // Recreate the chart with fullPoints and today's x-range to reliably reset view
+                const points = state.fullPoints || [];
+                const yRange = computeRange(points, 0.12, state.clampMin, state.clampMax);
+                try { if (state.chart) state.chart.destroy(); } catch (_) {}
+                state.chart = createChartInstance(state.ctx, points, state.color, state.bg, yRange, state.todayRange);
             } catch (e) {
                 console.warn('resetChart failed', e);
             }
