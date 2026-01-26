@@ -744,8 +744,9 @@
 
                 chart.options.scales = chart.options.scales || {};
                 chart.options.scales.y = chart.options.scales.y || {};
-                chart.options.scales.y.min = clampedMin;
-                chart.options.scales.y.max = clampedMax;
+                // Use suggestedMin/suggestedMax to avoid scriptable resolver issues
+                chart.options.scales.y.suggestedMin = clampedMin;
+                chart.options.scales.y.suggestedMax = clampedMax;
             } catch (e) {
                 console.warn('adjustYAxis error', e);
             }
