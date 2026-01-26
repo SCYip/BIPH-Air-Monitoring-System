@@ -723,9 +723,9 @@
                         x: {
                             type: 'time',
                             time: { tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm', minute: 'HH:mm' } },
-                            // accept xRange {min,max} ISO strings
-                            min: xRange ? xRange.min : undefined,
-                            max: xRange ? xRange.max : undefined,
+                            // accept xRange {minMs,maxMs} as millisecond timestamps
+                            min: xRange ? xRange.minMs : undefined,
+                            max: xRange ? xRange.maxMs : undefined,
                             grid: { display: false }
                         },
                         y: { ...commonChartOptions.scales.y, suggestedMin: yRange ? yRange.min : undefined, suggestedMax: yRange ? yRange.max : undefined }
@@ -752,35 +752,38 @@
         // Rebuild a line chart safely given points (objects with x,y)
         function rebuildLineChart(oldChart, ctx, points, color, bgColor, yRange, xRange) {
             try {
-                if (oldChart && typeof oldChart.update === 'function') {
-                    // Update existing chart in-place to avoid canvas reuse errors
+                // Prefer to get existing chart tied to the canvas (safer)
+                const existing = Chart.getChart(ctx.canvas);
+                if (existing) {
                     try {
-                        oldChart.data = { datasets: [{ data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] };
-                        oldChart.options = oldChart.options || {};
-                        oldChart.options.scales = oldChart.options.scales || {};
-                        oldChart.options.scales.y = oldChart.options.scales.y || {};
+                        existing.data = { datasets: [{ data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] };
+                        existing.options = existing.options || {};
+                        existing.options.scales = existing.options.scales || {};
+                        existing.options.scales.y = existing.options.scales.y || {};
                         if (yRange) {
-                            oldChart.options.scales.y.suggestedMin = yRange.min;
-                            oldChart.options.scales.y.suggestedMax = yRange.max;
+                            existing.options.scales.y.suggestedMin = yRange.min;
+                            existing.options.scales.y.suggestedMax = yRange.max;
                         }
-                        oldChart.options.scales.x = oldChart.options.scales.x || {};
+                        existing.options.scales.x = existing.options.scales.x || {};
                         if (xRange) {
-                            oldChart.options.scales.x.min = xRange.min;
-                            oldChart.options.scales.x.max = xRange.max;
+                            existing.options.scales.x.min = xRange.minMs;
+                            existing.options.scales.x.max = xRange.maxMs;
                         }
-                        oldChart.update();
-                        return oldChart;
+                        existing.update();
+                        return existing;
                     } catch (e) {
-                        console.warn('update existing chart failed, will recreate', e);
-                        try { oldChart.destroy(); } catch (e2) { /* ignore */ }
+                        console.warn('update existing chart failed, destroying and recreating', e);
+                        try { existing.destroy(); } catch (e2) { /* ignore */ }
                     }
-                } else if (oldChart && oldChart.canvas) {
-                    // oldChart exists but not a chart instance; attempt to destroy if possible
-                    try { if (typeof oldChart.destroy === 'function') oldChart.destroy(); } catch(e){ /* ignore */ }
                 }
             } catch (e) {
                 console.warn('rebuildLineChart pre-check error', e);
             }
+            // ensure any stray chart tied to this canvas is removed
+            try {
+                const stray = Chart.getChart(ctx.canvas);
+                if (stray) try { stray.destroy(); } catch(_) {}
+            } catch(_) {}
             return createChartInstance(ctx, points, color, bgColor, yRange, xRange);
         }
 
@@ -1157,14 +1160,14 @@
             }
 
             // Populate the fullPoints per-chart for zooming (points with x=ISO, y=value)
-            chartState.co2.fullPoints = labels.map((lbl, idx) => ({ x: times[idx], y: co2Data[idx] }));
-            chartState.temp.fullPoints = labels.map((lbl, idx) => ({ x: times[idx], y: tempData[idx] }));
-            chartState.hum.fullPoints  = labels.map((lbl, idx) => ({ x: times[idx], y: humData[idx] }));
+            chartState.co2.fullPoints = labels.map((lbl, idx) => ({ x: Date.parse(times[idx]), y: co2Data[idx] }));
+            chartState.temp.fullPoints = labels.map((lbl, idx) => ({ x: Date.parse(times[idx]), y: tempData[idx] }));
+            chartState.hum.fullPoints  = labels.map((lbl, idx) => ({ x: Date.parse(times[idx]), y: humData[idx] }));
 
             // Compute today's full-day x-range (local midnight to end of day)
             const startOfDay = new Date(tYear, tMonth, tDate, 0, 0, 0, 0);
             const endOfDay = new Date(tYear, tMonth, tDate, 23, 59, 59, 999);
-            const todayRange = { min: startOfDay.toISOString(), max: endOfDay.toISOString() };
+            const todayRange = { minMs: startOfDay.getTime(), maxMs: endOfDay.getTime() };
             chartState.co2.todayRange = todayRange;
             chartState.temp.todayRange = todayRange;
             chartState.hum.todayRange = todayRange;
