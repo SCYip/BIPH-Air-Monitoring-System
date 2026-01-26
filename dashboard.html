@@ -1066,13 +1066,7 @@
             } catch (e) {
                 console.warn('Could not set document.title', e);
             }
-            // Update navbar brand to location name
-            try {
-                const brandEl = document.getElementById('brand-title');
-                if (brandEl) brandEl.innerText = loc.name;
-            } catch (e) {
-                console.warn('Could not update navbar brand', e);
-            }
+            // Leave navbar brand HTML unchanged (avoid overwriting styled markup)
 
             // Reset Charts & UI
             clearCharts();
