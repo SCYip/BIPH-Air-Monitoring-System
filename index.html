@@ -606,6 +606,14 @@
 
             locations.forEach(loc => {
                 const isConfigured = loc.channelId && loc.readKey;
+                // Compute online status from lastUpdate (5 minutes threshold)
+                let isOnline = false;
+                if (loc.lastUpdate) {
+                    const lastMs = new Date(loc.lastUpdate).getTime();
+                    if (!isNaN(lastMs) && (Date.now() - lastMs) < 300000) {
+                        isOnline = true;
+                    }
+                }
                 
                 const card = document.createElement('div');
                 card.className = "bg-white rounded-2xl shadow-sm border border-slate-200 p-6 card-hover transition-all cursor-pointer relative group";
@@ -626,8 +634,8 @@
                     </div>
                     <h3 class="font-bold text-lg text-slate-900 mb-1">${loc.name}</h3>
                     <div class="flex items-center gap-2 text-sm text-slate-500 mb-4">
-                        <span class="w-2 h-2 rounded-full ${isConfigured ? 'bg-slate-400' : 'bg-slate-300'}"></span>
-                        ${isConfigured ? 'Ready to connect' : 'System Offline'}
+                        <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-green-400' : (isConfigured ? 'bg-yellow-400' : 'bg-slate-300')}"></span>
+                        ${isOnline ? 'System Online' : (isConfigured ? 'Ready to connect' : 'System Offline')}
                     </div>
                     <div class="text-xs text-slate-400 border-t pt-3 flex justify-between">
                         <span>Channel: ${loc.channelId || '---'}</span>

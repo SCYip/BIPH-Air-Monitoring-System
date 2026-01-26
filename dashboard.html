@@ -811,7 +811,8 @@
 
             const latest = feeds[feeds.length - 1];
             if (latest) {
-                updateDashboard(latest.field1, latest.field2, latest.created_at);
+                // field1 = CO2, field2 = Temperature, field3 = Humidity
+                updateDashboard(latest.field1, latest.field3, latest.created_at);
             }
 
             co2Chart.data.labels = labels;
