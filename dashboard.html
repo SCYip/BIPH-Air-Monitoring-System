@@ -923,22 +923,24 @@
                 }
             }
 
-            // Update Humidity if provided
+            // Update Humidity if provided (display with one decimal place)
             if (hum !== null && hum !== undefined && !isNaN(hum)) {
-                const humVal = Math.round(hum);
-                document.getElementById('humidity-value').innerText = humVal;
+                const humNum = Number(hum);
+                const humDisplay = humNum.toFixed(1);
+                document.getElementById('humidity-value').innerText = humDisplay;
                 const humBar = document.getElementById('humidity-bar');
                 const humInd = document.getElementById('humidity-indicator');
                 const humText = document.getElementById('humidity-status-text');
-                humBar.style.width = `${humVal}%`;
+                const humPercent = Math.min(100, Math.max(0, humNum));
+                humBar.style.width = `${humPercent}%`;
 
-                if (humVal >= 30 && humVal <= 60) {
+                if (humNum >= 30 && humNum <= 60) {
                     humInd.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-blue-100 text-blue-600";
                     humText.innerText = "Comfortable";
                     humText.className = "text-blue-600 font-bold";
                 } else {
                     humInd.className = "h-12 w-12 rounded-full flex items-center justify-center transition-colors duration-500 bg-orange-100 text-orange-600";
-                    humText.innerText = humVal < 30 ? "Dry Air" : "High Humidity";
+                    humText.innerText = humNum < 30 ? "Dry Air" : "High Humidity";
                     humText.className = "text-orange-600 font-bold";
                 }
             }
