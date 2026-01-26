@@ -6,7 +6,6 @@
     <title>Campus Air Quality Monitor - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
     <!-- Firebase SDK -->
@@ -720,17 +719,39 @@
                 options: {
                     ...commonChartOptions,
                     scales: {
+                        // Use numeric linear x-axis (milliseconds since epoch) to avoid adapter issues.
                         x: {
-                            type: 'time',
-                            time: { tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm', minute: 'HH:mm' } },
-                            // accept xRange {minMs,maxMs} as millisecond timestamps
+                            type: 'linear',
+                            ticks: {
+                                callback: function(value) {
+                                    try {
+                                        return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                    } catch (e) { return value; }
+                                },
+                                maxTicksLimit: 12
+                            },
                             min: xRange ? xRange.minMs : undefined,
                             max: xRange ? xRange.maxMs : undefined,
                             grid: { display: false }
                         },
                         y: { ...commonChartOptions.scales.y, suggestedMin: yRange ? yRange.min : undefined, suggestedMax: yRange ? yRange.max : undefined }
                     },
-                    parsing: false
+                    parsing: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(items) {
+                                    if (!items || !items.length) return '';
+                                    const val = items[0].parsed.x;
+                                    try { return new Date(val).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(e){ return ''; }
+                                },
+                                label: function(context) {
+                                    const v = context.parsed.y;
+                                    return ` ${v !== null && v !== undefined ? Number(v).toFixed(1) : '—'}`;
+                                }
+                            }
+                        }
+                    }
                 }
             });
         }
