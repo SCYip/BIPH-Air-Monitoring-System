@@ -361,7 +361,7 @@
                     <div class="bg-blue-600 text-white p-2 rounded-lg">
                         <i class="fa-solid fa-wind"></i>
                     </div>
-                    <span id="brand-title" class="font-bold text-xl tracking-tight text-slate-900">CampusAir<span class="text-blue-600">Guard</span></span>
+                    <span id="brand-title" class="font-bold text-xl tracking-tight text-slate-900">BIPH<span class="text-blue-600">AQS</span></span>
                 </div>
                 <div class="flex items-center gap-4">
                     <!-- Status Badge (Always visible in Dashboard) -->
@@ -503,7 +503,7 @@
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                 <h3 class="font-bold text-slate-800 mb-4">CO2 History (Last 20 Points)</h3>
                 <div class="relative h-64 w-full">
-                    <canvas id="co2Chart"></canvas>
+                    <canvas id="co2Chart" data-chart="co2"></canvas>
                 </div>
             </div>
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
@@ -511,13 +511,13 @@
                     <h3 class="font-bold text-slate-800">Temperature History (Today)</h3>
                 </div>
                 <div class="relative h-64 w-full">
-                    <canvas id="tempChart"></canvas>
+                    <canvas id="tempChart" data-chart="temp"></canvas>
                 </div>
             </div>
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                 <h3 class="font-bold text-slate-800 mb-4">Humidity History (Today)</h3>
                 <div class="relative h-64 w-full">
-                    <canvas id="humidityChart"></canvas>
+                    <canvas id="humidityChart" data-chart="hum"></canvas>
                 </div>
             </div>
         </div>
@@ -702,29 +702,38 @@
         };
 
         const co2Ctx = document.getElementById('co2Chart').getContext('2d');
-        let co2Chart = new Chart(co2Ctx, {
-            type: 'line',
-            data: { labels: [], datasets: [{ data: [], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }] },
-            options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: 300, suggestedMax: 1000 } } }
-        });
-
         const humCtx = document.getElementById('humidityChart').getContext('2d');
-        let humidityChart = new Chart(humCtx, {
-            type: 'line',
-            data: { labels: [], datasets: [{ data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true }] },
-            options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: 0, suggestedMax: 100 } } }
-        });
-
         const tempCtx = document.getElementById('tempChart').getContext('2d');
-        let tempChart = new Chart(tempCtx, {
-            type: 'line',
-            data: { labels: [], datasets: [{ data: [], borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.08)', fill: true }] },
-            options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: -10, suggestedMax: 50 } } }
-        });
-        
-        // Helper to compute min/max with padding
+
+        // Chart state per series to enable independent zooming/panning
+        const chartState = {
+            co2: { ctx: co2Ctx, chart: null, fullPoints: [], start: 0, size: 0, color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)', clampMin: 0, clampMax: undefined },
+            temp: { ctx: tempCtx, chart: null, fullPoints: [], start: 0, size: 0, color: '#f97316', bg: 'rgba(249, 115, 22, 0.08)', clampMin: -10, clampMax: 50 },
+            hum:  { ctx: humCtx,  chart: null, fullPoints: [], start: 0, size: 0, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)', clampMin: 0, clampMax: 100 }
+        };
+
+        function createChartInstance(ctx, points, color, bgColor, yRange) {
+            return new Chart(ctx, {
+                type: 'line',
+                data: { datasets: [{ data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] },
+                options: {
+                    ...commonChartOptions,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm', minute: 'HH:mm' } },
+                            grid: { display: false }
+                        },
+                        y: { ...commonChartOptions.scales.y, suggestedMin: yRange ? yRange.min : undefined, suggestedMax: yRange ? yRange.max : undefined }
+                    },
+                    parsing: false
+                }
+            });
+        }
+
+        // Helper to compute min/max with padding for points or numeric arrays
         function computeRange(dataArray, paddingRatio = 0.1, clampMin = undefined, clampMax = undefined) {
-            const nums = (dataArray || []).filter(v => v !== null && v !== undefined && !isNaN(v)).map(Number);
+            const nums = (dataArray || []).map(v => (v && typeof v === 'object' && v.y !== undefined) ? Number(v.y) : Number(v)).filter(v => !isNaN(v));
             if (!nums.length) return null;
             let min = Math.min(...nums);
             let max = Math.max(...nums);
@@ -736,14 +745,38 @@
             return { min: outMin, max: outMax };
         }
 
-        // Rebuild a line chart to avoid resolver/scriptable issues when changing scales
-        function rebuildLineChart(oldChart, ctx, labels, dataArray, color, bgColor, yRange) {
+        // Rebuild a line chart safely given points (objects with x,y)
+        function rebuildLineChart(oldChart, ctx, points, color, bgColor, yRange) {
             try { if (oldChart) oldChart.destroy(); } catch(e){ console.warn('destroy chart failed', e); }
-            return new Chart(ctx, {
-                type: 'line',
-                data: { labels: labels, datasets: [{ data: dataArray, borderColor: color, backgroundColor: bgColor, fill: true }] },
-                options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: yRange ? yRange.min : undefined, suggestedMax: yRange ? yRange.max : undefined } } }
-            });
+            return createChartInstance(ctx, points, color, bgColor, yRange);
+        }
+
+        // Apply window for a specific chart key (co2, temp, hum)
+        function applyWindowFor(key) {
+            const state = chartState[key];
+            if (!state) return;
+            const full = state.fullPoints || [];
+            if (!full.length) {
+                // rebuild empty chart
+                state.chart = rebuildLineChart(state.chart, state.ctx, [], state.color, state.bg, null);
+                return;
+            }
+
+            if (!state.size || state.size <= 0) state.size = full.length;
+            state.start = Math.max(0, Math.min(state.start || 0, Math.max(0, full.length - 1)));
+            if (state.start + state.size > full.length) state.start = Math.max(0, full.length - state.size);
+
+            const vis = full.slice(state.start, state.start + state.size);
+            const range = computeRange(vis, 0.12, state.clampMin, state.clampMax);
+            state.chart = rebuildLineChart(state.chart, state.ctx, vis, state.color, state.bg, range);
+        }
+
+        function applyWindowAndRebuild() {
+            applyWindowFor('co2');
+            applyWindowFor('temp');
+            applyWindowFor('hum');
+            // Reattach interactions to the new canvases
+            attachCanvasInteractions();
         }
         
         // Full datasets and windowing state for zooming
@@ -802,31 +835,35 @@
 
         // Mouse interactions: wheel zoom and drag pan
         function attachCanvasInteractions() {
-            const canvases = [co2Chart.canvas, tempChart.canvas, humidityChart.canvas];
+            const canvases = document.querySelectorAll('canvas[data-chart]');
             canvases.forEach(canvas => {
                 if (!canvas) return;
                 // Cleanup previous handlers if present
                 if (canvas._zoomCleanup) canvas._zoomCleanup();
 
-                // Wheel to zoom
+                const chartKey = canvas.dataset.chart;
+                const state = chartState[chartKey];
+                if (!state) return;
+
+                // Wheel to zoom (focus at pointer)
                 const onWheel = (e) => {
                     e.preventDefault();
-                    if (!fullLabels.length) return;
+                    const fullLen = (state.fullPoints || []).length;
+                    if (!fullLen) return;
                     const rect = canvas.getBoundingClientRect();
                     const x = e.clientX - rect.left;
-                    const cw = rect.width || canvas.width;
-                    const rel = Math.max(0, Math.min(1, x / cw));
-                    const focalIndex = Math.floor(windowStart + rel * windowSize);
+                    const rel = Math.max(0, Math.min(1, x / (rect.width || canvas.width)));
+                    const focalIndex = Math.floor(state.start + rel * state.size);
 
                     const zoomFactor = e.deltaY < 0 ? 0.7 : 1.3; // wheel up zoom in
                     const minSize = 5;
-                    const maxSize = fullLabels.length || 1;
-                    let newSize = Math.round(Math.max(minSize, Math.min(maxSize, windowSize * zoomFactor)));
-                    const centerOffset = focalIndex - windowStart;
-                    const newStart = Math.max(0, Math.min(fullLabels.length - newSize, focalIndex - Math.round((centerOffset / windowSize) * newSize)));
-                    windowSize = newSize;
-                    windowStart = newStart;
-                    applyWindowAndRebuild();
+                    const maxSize = fullLen;
+                    let newSize = Math.round(Math.max(minSize, Math.min(maxSize, (state.size || fullLen) * zoomFactor)));
+                    const centerOffset = focalIndex - (state.start || 0);
+                    const newStart = Math.max(0, Math.min(fullLen - newSize, focalIndex - Math.round((centerOffset / (state.size || fullLen)) * newSize)));
+                    state.size = newSize;
+                    state.start = newStart;
+                    applyWindowFor(chartKey);
                 };
 
                 // Drag to pan
@@ -838,13 +875,15 @@
                     canvas.style.cursor = 'grabbing';
                 };
                 const onMouseMove = (e) => {
-                    if (!dragging || !fullLabels.length) return;
+                    if (!dragging) return;
+                    const fullLen = (state.fullPoints || []).length;
+                    if (!fullLen || !state.size) return;
                     const rect = canvas.getBoundingClientRect();
                     const dx = e.clientX - lastX;
                     lastX = e.clientX;
-                    const deltaIndices = Math.round((dx / rect.width) * windowSize);
-                    windowStart = Math.max(0, Math.min(fullLabels.length - windowSize, windowStart - deltaIndices));
-                    applyWindowAndRebuild();
+                    const deltaIndices = Math.round((dx / rect.width) * state.size);
+                    state.start = Math.max(0, Math.min(fullLen - state.size, (state.start || 0) - deltaIndices));
+                    applyWindowFor(chartKey);
                 };
                 const onMouseUp = () => {
                     dragging = false;
@@ -957,7 +996,7 @@
             updateStatus('loading');
 
             try {
-                const url = `https://api.thingspeak.com/channels/${loc.channelId}/feeds.json?api_key=${loc.readKey}&results=20`;
+                const url = `https://api.thingspeak.com/channels/${loc.channelId}/feeds.json?api_key=${loc.readKey}&results=8000`;
                 console.log('Fetching ThingSpeak URL:', url);
 
                 const response = await fetch(url);
@@ -1021,14 +1060,16 @@
             const co2Data = [];
             const tempData = [];
             const humData = [];
+            const times = [];
 
             feeds.forEach(feed => {
                 if (feed.field1 !== null) {
                     const date = new Date(feed.created_at);
                     // include only feeds from same local day
                     if (date.getFullYear() === tYear && date.getMonth() === tMonth && date.getDate() === tDate) {
-                        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        labels.push(timeStr);
+                    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    labels.push(timeStr);
+                    times.push(feed.created_at);
                         co2Data.push(parseFloat(feed.field1));
                         // field2 = Temperature, field3 = Humidity
                         tempData.push(feed.field2 !== null && feed.field2 !== undefined ? parseFloat(feed.field2) : null);
@@ -1051,18 +1092,18 @@
                 });
             }
 
-            // Populate the full datasets for zooming
-            fullLabels = labels;
-            fullCo2Data = co2Data;
-            fullTempData = tempData;
-            fullHumData = humData;
-            windowStart = 0;
-            windowSize = fullLabels.length;
+            // Populate the fullPoints per-chart for zooming (points with x=ISO, y=value)
+            chartState.co2.fullPoints = labels.map((lbl, idx) => ({ x: times[idx], y: co2Data[idx] }));
+            chartState.temp.fullPoints = labels.map((lbl, idx) => ({ x: times[idx], y: tempData[idx] }));
+            chartState.hum.fullPoints  = labels.map((lbl, idx) => ({ x: times[idx], y: humData[idx] }));
+
+            chartState.co2.start = 0; chartState.co2.size = chartState.co2.fullPoints.length;
+            chartState.temp.start = 0; chartState.temp.size = chartState.temp.fullPoints.length;
+            chartState.hum.start  = 0; chartState.hum.size  = chartState.hum.fullPoints.length;
 
             // Choose latest feed to display in cards: prefer today's last feed, otherwise the last overall
             let latestFeed = null;
             if (labels.length > 0) {
-                // pick last matching today's feed
                 for (let i = feeds.length - 1; i >= 0; i--) {
                     const d = new Date(feeds[i].created_at);
                     if (d.getFullYear() === tYear && d.getMonth() === tMonth && d.getDate() === tDate) {
@@ -1072,12 +1113,9 @@
                 }
             }
             if (!latestFeed) latestFeed = feeds[feeds.length - 1];
+            if (latestFeed) updateDashboard(latestFeed.field1, latestFeed.field2, latestFeed.field3, latestFeed.created_at);
 
-            if (latestFeed) {
-                updateDashboard(latestFeed.field1, latestFeed.field2, latestFeed.field3, latestFeed.created_at);
-            }
-
-            // Build visible window and rebuild charts
+            // Build visible window and rebuild charts (independent per chart)
             applyWindowAndRebuild();
         }
 
