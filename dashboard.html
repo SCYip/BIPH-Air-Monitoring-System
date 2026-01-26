@@ -6,6 +6,7 @@
     <title>Campus Air Quality Monitor - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
     <!-- Firebase SDK -->
@@ -750,7 +751,36 @@
 
         // Rebuild a line chart safely given points (objects with x,y)
         function rebuildLineChart(oldChart, ctx, points, color, bgColor, yRange, xRange) {
-            try { if (oldChart) oldChart.destroy(); } catch(e){ console.warn('destroy chart failed', e); }
+            try {
+                if (oldChart && typeof oldChart.update === 'function') {
+                    // Update existing chart in-place to avoid canvas reuse errors
+                    try {
+                        oldChart.data = { datasets: [{ data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] };
+                        oldChart.options = oldChart.options || {};
+                        oldChart.options.scales = oldChart.options.scales || {};
+                        oldChart.options.scales.y = oldChart.options.scales.y || {};
+                        if (yRange) {
+                            oldChart.options.scales.y.suggestedMin = yRange.min;
+                            oldChart.options.scales.y.suggestedMax = yRange.max;
+                        }
+                        oldChart.options.scales.x = oldChart.options.scales.x || {};
+                        if (xRange) {
+                            oldChart.options.scales.x.min = xRange.min;
+                            oldChart.options.scales.x.max = xRange.max;
+                        }
+                        oldChart.update();
+                        return oldChart;
+                    } catch (e) {
+                        console.warn('update existing chart failed, will recreate', e);
+                        try { oldChart.destroy(); } catch (e2) { /* ignore */ }
+                    }
+                } else if (oldChart && oldChart.canvas) {
+                    // oldChart exists but not a chart instance; attempt to destroy if possible
+                    try { if (typeof oldChart.destroy === 'function') oldChart.destroy(); } catch(e){ /* ignore */ }
+                }
+            } catch (e) {
+                console.warn('rebuildLineChart pre-check error', e);
+            }
             return createChartInstance(ctx, points, color, bgColor, yRange, xRange);
         }
 
