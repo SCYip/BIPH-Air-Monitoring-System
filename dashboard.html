@@ -798,12 +798,14 @@
             const humData = [];
 
             feeds.forEach(feed => {
-                if(feed.field1 !== null && feed.field2 !== null) {
+                if(feed.field1 !== null) {
                     const date = new Date(feed.created_at);
                     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     labels.push(timeStr);
                     co2Data.push(parseFloat(feed.field1));
-                    humData.push(parseFloat(feed.field2));
+                    // Prefer field3 for humidity if available, fallback to field2
+                    const humVal = (feed.field3 !== undefined && feed.field3 !== null) ? feed.field3 : feed.field2;
+                    humData.push(humVal !== null ? parseFloat(humVal) : NaN);
                 }
             });
 
