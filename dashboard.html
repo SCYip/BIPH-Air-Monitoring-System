@@ -502,7 +502,10 @@
         <!-- Charts Section -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <h3 class="font-bold text-slate-800 mb-4">CO2 History (Last 20 Points)</h3>
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="font-bold text-slate-800">CO2 History (Today)</h3>
+                    <button onclick="resetChart('co2')" class="px-2 py-1 bg-slate-100 rounded text-sm">Reset</button>
+                </div>
                 <div class="relative h-64 w-full">
                     <canvas id="co2Chart" data-chart="co2"></canvas>
                 </div>
@@ -826,14 +829,22 @@
             const state = chartState[key];
             if (!state || !state.chart) return;
             try {
+                // Always set x-axis to today's range if available, otherwise clear limits.
                 if (state.todayRange) {
+                    state.chart.options.scales = state.chart.options.scales || {};
+                    state.chart.options.scales.x = state.chart.options.scales.x || {};
                     state.chart.options.scales.x.min = state.todayRange.minMs;
                     state.chart.options.scales.x.max = state.todayRange.maxMs;
                 } else {
-                    state.chart.options.scales.x.min = undefined;
-                    state.chart.options.scales.x.max = undefined;
+                    if (state.chart.options && state.chart.options.scales && state.chart.options.scales.x) {
+                        delete state.chart.options.scales.x.min;
+                        delete state.chart.options.scales.x.max;
+                    }
                 }
-                state.chart.resetZoom && state.chart.resetZoom();
+                // If plugin resetZoom exists, call it; otherwise do an update.
+                if (typeof state.chart.resetZoom === 'function') {
+                    try { state.chart.resetZoom(); } catch (_) { /* ignore */ }
+                }
                 state.chart.update();
             } catch (e) {
                 console.warn('resetChart failed', e);
