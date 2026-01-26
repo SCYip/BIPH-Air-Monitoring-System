@@ -720,6 +720,37 @@
             options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: -10, suggestedMax: 50 } } }
         });
 
+        // Adjust y-axis scale dynamically based on dataset values (with padding and optional clamps)
+        function adjustYAxis(chart, dataArray, options = {}) {
+            try {
+                const nums = (dataArray || []).filter(v => v !== null && v !== undefined && !isNaN(v)).map(Number);
+                if (!nums.length) return;
+                let min = Math.min(...nums);
+                let max = Math.max(...nums);
+
+                // padding ratio (default 10%)
+                const paddingRatio = typeof options.paddingRatio === 'number' ? options.paddingRatio : 0.1;
+                let padding = (max - min) * paddingRatio;
+                if (padding === 0) padding = options.minPadding || 1;
+
+                let clampedMin = (typeof options.clampMin === 'number') ? Math.max(options.clampMin, min - padding) : min - padding;
+                let clampedMax = (typeof options.clampMax === 'number') ? Math.min(options.clampMax, max + padding) : max + padding;
+
+                // ensure min < max
+                if (clampedMin >= clampedMax) {
+                    clampedMin = min - 1;
+                    clampedMax = max + 1;
+                }
+
+                chart.options.scales = chart.options.scales || {};
+                chart.options.scales.y = chart.options.scales.y || {};
+                chart.options.scales.y.min = clampedMin;
+                chart.options.scales.y.max = clampedMax;
+            } catch (e) {
+                console.warn('adjustYAxis error', e);
+            }
+        }
+
         function clearCharts() {
             co2Chart.data.labels = [];
             co2Chart.data.datasets[0].data = [];
@@ -859,14 +890,19 @@
 
             co2Chart.data.labels = labels;
             co2Chart.data.datasets[0].data = co2Data;
-            humidityChart.data.labels = labels;
-            humidityChart.data.datasets[0].data = humData;
             tempChart.data.labels = labels;
             tempChart.data.datasets[0].data = tempData;
+            humidityChart.data.labels = labels;
+            humidityChart.data.datasets[0].data = humData;
+
+            // Auto-scale Y axes for better zoomed-in view
+            adjustYAxis(co2Chart, co2Data, { paddingRatio: 0.12, clampMin: 0 });
+            adjustYAxis(tempChart, tempData, { paddingRatio: 0.12, clampMin: -10, clampMax: 50 });
+            adjustYAxis(humidityChart, humData, { paddingRatio: 0.08, clampMin: 0, clampMax: 100 });
 
             co2Chart.update();
-            humidityChart.update();
             tempChart.update();
+            humidityChart.update();
         }
 
         function updateDashboard(co2, temp, hum, timestamp) {
