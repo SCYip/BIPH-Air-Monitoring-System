@@ -914,16 +914,29 @@
                     const rect = canvas.getBoundingClientRect();
                     const x = e.clientX - rect.left;
                     const rel = Math.max(0, Math.min(1, x / (rect.width || canvas.width)));
-                    const focalIndex = Math.floor(state.start + rel * state.size);
+                    const focalIndex = Math.floor((state.start || 0) + rel * (state.size || fullLen));
 
-                    const zoomFactor = e.deltaY < 0 ? 0.7 : 1.3; // wheel up zoom in
+                    // Normalize delta; some devices invert deltaY sign or use large values.
+                    const delta = Math.sign(e.deltaY || 0);
+                    // If delta === 0 fallback to tiny step from deltaY value
+                    const zoomIn = (delta < 0);
+                    const zoomStep = 0.7; // multiply size when zooming in
                     const minSize = 5;
                     const maxSize = fullLen;
-                    let newSize = Math.round(Math.max(minSize, Math.min(maxSize, (state.size || fullLen) * zoomFactor)));
+
+                    let currentSize = Math.max(1, state.size || fullLen);
+                    let newSize = zoomIn ? Math.max(minSize, Math.floor(currentSize * zoomStep)) : Math.min(maxSize, Math.ceil(currentSize / zoomStep));
+
+                    // ensure size changes
+                    if (newSize === currentSize) {
+                        newSize = zoomIn ? Math.max(minSize, currentSize - 1) : Math.min(maxSize, currentSize + 1);
+                    }
+
                     const centerOffset = focalIndex - (state.start || 0);
-                    const newStart = Math.max(0, Math.min(fullLen - newSize, focalIndex - Math.round((centerOffset / (state.size || fullLen)) * newSize)));
+                    const newStart = Math.max(0, Math.min(fullLen - newSize, focalIndex - Math.round((centerOffset / currentSize) * newSize)));
                     state.size = newSize;
                     state.start = newStart;
+                    state.userZoomed = true;
                     applyWindowFor(chartKey);
                 };
 
@@ -937,6 +950,8 @@
                     lastX = e.clientX;
                     try { canvas.setPointerCapture(pointerId); } catch(_) {}
                     canvas.style.cursor = 'grabbing';
+                    // mark interacting to pause live updates
+                    state.isInteracting = true;
                 };
                 const onPointerMove = (e) => {
                     if (!isDragging || e.pointerId !== pointerId) return;
@@ -955,6 +970,14 @@
                     try { canvas.releasePointerCapture(pointerId); } catch(_) {}
                     pointerId = null;
                     canvas.style.cursor = 'default';
+                    // allow updates after a short debounce
+                    state.isInteracting = false;
+                    if (canvas._applyPending) {
+                        clearTimeout(canvas._applyPending);
+                        canvas._applyPending = null;
+                    }
+                    // small delay to avoid racing with fetch
+                    canvas._applyPending = setTimeout(()=>{ if(!state.isInteracting) applyWindowFor(chartKey); }, 300);
                 };
 
                 canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -1115,7 +1138,16 @@
                         updateStatus('online');
                     }
 
-                    processFeeds(data.feeds);
+                    // If the user is interacting with any chart, defer applying fetched data briefly
+                    const anyInteracting = Object.values(chartState).some(s => s.isInteracting);
+                    if (anyInteracting) {
+                        // store pending feeds and apply after short debounce
+                        window._pendingFeeds = data.feeds;
+                        if (window._pendingTimeout) clearTimeout(window._pendingTimeout);
+                        window._pendingTimeout = setTimeout(()=>{ if(!Object.values(chartState).some(s=>s.isInteracting)) processFeeds(window._pendingFeeds); }, 600);
+                    } else {
+                        processFeeds(data.feeds);
+                    }
                     // Save latest feed time to Firestore so home cards show last update
                     try {
                         const latestFeed = data.feeds[data.feeds.length - 1];
