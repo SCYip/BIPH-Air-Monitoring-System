@@ -6,6 +6,7 @@
     <title>Campus Air Quality Monitor - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
     <!-- Firebase SDK -->
@@ -750,6 +751,10 @@
                                     return ` ${v !== null && v !== undefined ? Number(v).toFixed(1) : '—'}`;
                                 }
                             }
+                        },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x', modifierKey: null },
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
                         }
                     }
                 }
@@ -897,112 +902,13 @@
         // Mouse interactions: wheel zoom and drag pan
         function attachCanvasInteractions() {
             const canvases = document.querySelectorAll('canvas[data-chart]');
+            // No-op: Chart.js zoom plugin handles interactions per-chart
+            // Keep a placeholder so existing calls are safe.
             canvases.forEach(canvas => {
-                if (!canvas) return;
-                // Cleanup previous handlers if present
-                if (canvas._zoomCleanup) canvas._zoomCleanup();
-
-                const chartKey = canvas.dataset.chart;
-                const state = chartState[chartKey];
-                if (!state) return;
-
-                // Wheel to zoom (focus at pointer)
-                const onWheel = (e) => {
-                    e.preventDefault();
-                    const fullLen = (state.fullPoints || []).length;
-                    if (!fullLen) return;
-                    const rect = canvas.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const rel = Math.max(0, Math.min(1, x / (rect.width || canvas.width)));
-                    const focalIndex = Math.floor((state.start || 0) + rel * (state.size || fullLen));
-
-                    // Normalize delta; some devices invert deltaY sign or use large values.
-                    const delta = Math.sign(e.deltaY || 0);
-                    // If delta === 0 fallback to tiny step from deltaY value
-                    const zoomIn = (delta < 0);
-                    const zoomStep = 0.7; // multiply size when zooming in
-                    const minSize = 5;
-                    const maxSize = fullLen;
-
-                    let currentSize = Math.max(1, state.size || fullLen);
-                    let newSize = zoomIn ? Math.max(minSize, Math.floor(currentSize * zoomStep)) : Math.min(maxSize, Math.ceil(currentSize / zoomStep));
-
-                    // ensure size changes
-                    if (newSize === currentSize) {
-                        newSize = zoomIn ? Math.max(minSize, currentSize - 1) : Math.min(maxSize, currentSize + 1);
-                    }
-
-                    const centerOffset = focalIndex - (state.start || 0);
-                    const newStart = Math.max(0, Math.min(fullLen - newSize, focalIndex - Math.round((centerOffset / currentSize) * newSize)));
-                    state.size = newSize;
-                    state.start = newStart;
-                    state.userZoomed = true;
-                    applyWindowFor(chartKey);
-                };
-
-                // Drag to pan using pointer events for reliable capture
-                let isDragging = false;
-                let pointerId = null;
-                let lastX = 0;
-                const onPointerDown = (e) => {
-                    isDragging = true;
-                    pointerId = e.pointerId;
-                    lastX = e.clientX;
-                    try { canvas.setPointerCapture(pointerId); } catch(_) {}
-                    canvas.style.cursor = 'grabbing';
-                    // mark interacting to pause live updates
-                    state.isInteracting = true;
-                };
-                const onPointerMove = (e) => {
-                    if (!isDragging || e.pointerId !== pointerId) return;
-                    const fullLen = (state.fullPoints || []).length;
-                    if (!fullLen || !state.size) return;
-                    const rect = canvas.getBoundingClientRect();
-                    const dx = e.clientX - lastX;
-                    lastX = e.clientX;
-                    const deltaIndices = Math.round((dx / rect.width) * state.size);
-                    state.start = Math.max(0, Math.min(fullLen - state.size, (state.start || 0) - deltaIndices));
-                    applyWindowFor(chartKey);
-                };
-                const onPointerUp = (e) => {
-                    if (e.pointerId !== pointerId) return;
-                    isDragging = false;
-                    try { canvas.releasePointerCapture(pointerId); } catch(_) {}
-                    pointerId = null;
-                    canvas.style.cursor = 'default';
-                    // allow updates after a short debounce
-                    state.isInteracting = false;
-                    if (canvas._applyPending) {
-                        clearTimeout(canvas._applyPending);
-                        canvas._applyPending = null;
-                    }
-                    // small delay to avoid racing with fetch
-                    canvas._applyPending = setTimeout(()=>{ if(!state.isInteracting) applyWindowFor(chartKey); }, 300);
-                };
-
-                canvas.addEventListener('wheel', onWheel, { passive: false });
-                canvas.addEventListener('pointerdown', onPointerDown);
-                canvas.addEventListener('pointermove', onPointerMove);
-                canvas.addEventListener('pointerup', onPointerUp);
-                canvas.addEventListener('pointercancel', onPointerUp);
-                // double click to reset this chart
-                const onDblClick = () => {
-                    state.start = 0;
-                    state.size = state.fullPoints.length;
-                    applyWindowFor(chartKey);
-                };
-                canvas.addEventListener('dblclick', onDblClick);
-
-                // store cleanup
-                canvas._zoomCleanup = () => {
-                    canvas.removeEventListener('wheel', onWheel);
-                    canvas.removeEventListener('pointerdown', onPointerDown);
-                    canvas.removeEventListener('pointermove', onPointerMove);
-                    canvas.removeEventListener('pointerup', onPointerUp);
-                    canvas.removeEventListener('pointercancel', onPointerUp);
-                    canvas.removeEventListener('dblclick', onDblClick);
+                if (canvas && canvas._zoomCleanup) {
+                    try { canvas._zoomCleanup(); } catch(_) {}
                     delete canvas._zoomCleanup;
-                };
+                }
             });
         }
 
@@ -1248,8 +1154,29 @@
             if (!latestFeed) latestFeed = feeds[feeds.length - 1];
             if (latestFeed) updateDashboard(latestFeed.field1, latestFeed.field2, latestFeed.field3, latestFeed.created_at);
 
-            // Build visible window and rebuild charts (independent per chart)
-            applyWindowAndRebuild();
+            // Build or update charts per chartState using plugin (no custom windowing)
+            ['co2','temp','hum'].forEach(key => {
+                const state = chartState[key];
+                if (!state) return;
+                const points = state.fullPoints || [];
+                const yRange = computeRange(points, 0.12, state.clampMin, state.clampMax);
+                if (!state.chart) {
+                    state.chart = createChartInstance(state.ctx, points, state.color, state.bg, yRange, state.todayRange);
+                } else {
+                    // update dataset in-place
+                    try {
+                        const ds = state.chart.data && state.chart.data.datasets && state.chart.data.datasets[0];
+                        if (ds) ds.data = points;
+                        else state.chart.data = { datasets: [{ data: points, borderColor: state.color, backgroundColor: state.bg, fill: true, parsing: false }] };
+                        // don't modify x min/max on update to avoid resolver issues
+                        state.chart.update();
+                    } catch (e) {
+                        console.warn('chart update failed, recreating', e);
+                        try { state.chart.destroy(); } catch(_) {}
+                        state.chart = createChartInstance(state.ctx, points, state.color, state.bg, yRange, state.todayRange);
+                    }
+                }
+            });
         }
 
         function updateDashboard(co2, temp, hum, timestamp) {
