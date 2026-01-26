@@ -712,7 +712,7 @@
             hum:  { ctx: humCtx,  chart: null, fullPoints: [], start: 0, size: 0, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)', clampMin: 0, clampMax: 100 }
         };
 
-        function createChartInstance(ctx, points, color, bgColor, yRange) {
+        function createChartInstance(ctx, points, color, bgColor, yRange, xRange) {
             return new Chart(ctx, {
                 type: 'line',
                 data: { datasets: [{ data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] },
@@ -722,6 +722,9 @@
                         x: {
                             type: 'time',
                             time: { tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm', minute: 'HH:mm' } },
+                            // accept xRange {min,max} ISO strings
+                            min: xRange ? xRange.min : undefined,
+                            max: xRange ? xRange.max : undefined,
                             grid: { display: false }
                         },
                         y: { ...commonChartOptions.scales.y, suggestedMin: yRange ? yRange.min : undefined, suggestedMax: yRange ? yRange.max : undefined }
@@ -746,9 +749,9 @@
         }
 
         // Rebuild a line chart safely given points (objects with x,y)
-        function rebuildLineChart(oldChart, ctx, points, color, bgColor, yRange) {
+        function rebuildLineChart(oldChart, ctx, points, color, bgColor, yRange, xRange) {
             try { if (oldChart) oldChart.destroy(); } catch(e){ console.warn('destroy chart failed', e); }
-            return createChartInstance(ctx, points, color, bgColor, yRange);
+            return createChartInstance(ctx, points, color, bgColor, yRange, xRange);
         }
 
         // Apply window for a specific chart key (co2, temp, hum)
@@ -758,7 +761,7 @@
             const full = state.fullPoints || [];
             if (!full.length) {
                 // rebuild empty chart
-                state.chart = rebuildLineChart(state.chart, state.ctx, [], state.color, state.bg, null);
+                state.chart = rebuildLineChart(state.chart, state.ctx, [], state.color, state.bg, null, state.todayRange || null);
                 return;
             }
 
@@ -768,7 +771,7 @@
 
             const vis = full.slice(state.start, state.start + state.size);
             const range = computeRange(vis, 0.12, state.clampMin, state.clampMax);
-            state.chart = rebuildLineChart(state.chart, state.ctx, vis, state.color, state.bg, range);
+            state.chart = rebuildLineChart(state.chart, state.ctx, vis, state.color, state.bg, range, state.todayRange || null);
         }
 
         function applyWindowAndRebuild() {
@@ -955,12 +958,27 @@
         }
 
         function clearCharts() {
-            co2Chart.data.labels = [];
-            co2Chart.data.datasets[0].data = [];
-            co2Chart.update();
-            humidityChart.data.labels = [];
-            humidityChart.data.datasets[0].data = [];
-            humidityChart.update();
+            try {
+                if (chartState.co2 && chartState.co2.chart) {
+                    chartState.co2.chart.data.labels = [];
+                    chartState.co2.chart.data.datasets[0].data = [];
+                    chartState.co2.chart.update();
+                }
+            } catch(e) { console.warn('clearCharts co2', e); }
+            try {
+                if (chartState.hum && chartState.hum.chart) {
+                    chartState.hum.chart.data.labels = [];
+                    chartState.hum.chart.data.datasets[0].data = [];
+                    chartState.hum.chart.update();
+                }
+            } catch(e) { console.warn('clearCharts hum', e); }
+            try {
+                if (chartState.temp && chartState.temp.chart) {
+                    chartState.temp.chart.data.labels = [];
+                    chartState.temp.chart.data.datasets[0].data = [];
+                    chartState.temp.chart.update();
+                }
+            } catch(e) { console.warn('clearCharts temp', e); }
 
             // Reset text
             document.getElementById('co2-value').innerText = '--';
@@ -1112,6 +1130,14 @@
             chartState.co2.fullPoints = labels.map((lbl, idx) => ({ x: times[idx], y: co2Data[idx] }));
             chartState.temp.fullPoints = labels.map((lbl, idx) => ({ x: times[idx], y: tempData[idx] }));
             chartState.hum.fullPoints  = labels.map((lbl, idx) => ({ x: times[idx], y: humData[idx] }));
+
+            // Compute today's full-day x-range (local midnight to end of day)
+            const startOfDay = new Date(tYear, tMonth, tDate, 0, 0, 0, 0);
+            const endOfDay = new Date(tYear, tMonth, tDate, 23, 59, 59, 999);
+            const todayRange = { min: startOfDay.toISOString(), max: endOfDay.toISOString() };
+            chartState.co2.todayRange = todayRange;
+            chartState.temp.todayRange = todayRange;
+            chartState.hum.todayRange = todayRange;
 
             chartState.co2.start = 0; chartState.co2.size = chartState.co2.fullPoints.length;
             chartState.temp.start = 0; chartState.temp.size = chartState.temp.fullPoints.length;
