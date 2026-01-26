@@ -507,13 +507,8 @@
                 </div>
             </div>
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <div class="flex items-center justify-between mb-4">
+                <div class="mb-4">
                     <h3 class="font-bold text-slate-800">Temperature History (Today)</h3>
-                    <div class="flex gap-2 items-center">
-                        <button onclick="zoomIn()" class="px-2 py-1 bg-slate-100 rounded">Zoom In</button>
-                        <button onclick="zoomOut()" class="px-2 py-1 bg-slate-100 rounded">Zoom Out</button>
-                        <button onclick="resetZoom()" class="px-2 py-1 bg-slate-100 rounded">Reset</button>
-                    </div>
                 </div>
                 <div class="relative h-64 w-full">
                     <canvas id="tempChart"></canvas>
@@ -776,6 +771,8 @@
             co2Chart = rebuildLineChart(co2Chart, co2Ctx, visLabels, visCo2, '#10b981', 'rgba(16, 185, 129, 0.1)', co2Range);
             tempChart = rebuildLineChart(tempChart, tempCtx, visLabels, visTemp, '#f97316', 'rgba(249, 115, 22, 0.08)', tempRange);
             humidityChart = rebuildLineChart(humidityChart, humCtx, visLabels, visHum, '#3b82f6', 'rgba(59, 130, 246, 0.1)', humRange);
+            // Reattach interactions to the new canvases
+            attachCanvasInteractions();
         }
 
         function zoomIn() {
@@ -801,6 +798,73 @@
             windowStart = 0;
             windowSize = fullLabels.length;
             applyWindowAndRebuild();
+        }
+
+        // Mouse interactions: wheel zoom and drag pan
+        function attachCanvasInteractions() {
+            const canvases = [co2Chart.canvas, tempChart.canvas, humidityChart.canvas];
+            canvases.forEach(canvas => {
+                if (!canvas) return;
+                // Cleanup previous handlers if present
+                if (canvas._zoomCleanup) canvas._zoomCleanup();
+
+                // Wheel to zoom
+                const onWheel = (e) => {
+                    e.preventDefault();
+                    if (!fullLabels.length) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const cw = rect.width || canvas.width;
+                    const rel = Math.max(0, Math.min(1, x / cw));
+                    const focalIndex = Math.floor(windowStart + rel * windowSize);
+
+                    const zoomFactor = e.deltaY < 0 ? 0.7 : 1.3; // wheel up zoom in
+                    const minSize = 5;
+                    const maxSize = fullLabels.length || 1;
+                    let newSize = Math.round(Math.max(minSize, Math.min(maxSize, windowSize * zoomFactor)));
+                    const centerOffset = focalIndex - windowStart;
+                    const newStart = Math.max(0, Math.min(fullLabels.length - newSize, focalIndex - Math.round((centerOffset / windowSize) * newSize)));
+                    windowSize = newSize;
+                    windowStart = newStart;
+                    applyWindowAndRebuild();
+                };
+
+                // Drag to pan
+                let dragging = false;
+                let lastX = 0;
+                const onMouseDown = (e) => {
+                    dragging = true;
+                    lastX = e.clientX;
+                    canvas.style.cursor = 'grabbing';
+                };
+                const onMouseMove = (e) => {
+                    if (!dragging || !fullLabels.length) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const dx = e.clientX - lastX;
+                    lastX = e.clientX;
+                    const deltaIndices = Math.round((dx / rect.width) * windowSize);
+                    windowStart = Math.max(0, Math.min(fullLabels.length - windowSize, windowStart - deltaIndices));
+                    applyWindowAndRebuild();
+                };
+                const onMouseUp = () => {
+                    dragging = false;
+                    canvas.style.cursor = 'default';
+                };
+
+                canvas.addEventListener('wheel', onWheel, { passive: false });
+                canvas.addEventListener('mousedown', onMouseDown);
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+
+                // store cleanup
+                canvas._zoomCleanup = () => {
+                    canvas.removeEventListener('wheel', onWheel);
+                    canvas.removeEventListener('mousedown', onMouseDown);
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                    delete canvas._zoomCleanup;
+                };
+            });
         }
 
         // Adjust y-axis scale dynamically based on dataset values (with padding and optional clamps)
