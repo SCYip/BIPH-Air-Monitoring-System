@@ -553,9 +553,22 @@
             await renderHome();
         }
 
-        function openDashboard(id) {
-            // Navigate to dashboard page with location parameter
-            window.location.href = `/dashboard/${encodeURIComponent(id)}`;
+        async function openDashboard(id) {
+            // Before navigating, confirm the location exists in the database
+            try {
+                const loc = await locationManager.getLocationById(id);
+                if (!loc) {
+                    console.warn('openDashboard: location not found in database', id);
+                    alert('Location not found in database. It may not have been saved correctly.');
+                    await renderHome();
+                    return;
+                }
+                // Navigate to dashboard page with location parameter
+                window.location.href = `/dashboard/${encodeURIComponent(id)}`;
+            } catch (error) {
+                console.error('openDashboard error:', error);
+                alert('Error checking location in database. See console for details.');
+            }
         }
 
         // --- Home View Logic ---
