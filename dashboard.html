@@ -405,7 +405,7 @@
         </div>
 
         <!-- Metrics Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 
             <!-- CO2 Card -->
             <div class="glass-panel bg-white rounded-2xl shadow-sm border border-slate-200 p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
@@ -433,6 +433,36 @@
                     <div class="flex justify-between mt-2 text-xs font-medium">
                         <span id="co2-status-text" class="text-slate-400">Waiting for data...</span>
                         <span class="text-slate-400">Target: &lt;1000 ppm</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Temperature Card -->
+            <div class="glass-panel bg-white rounded-2xl shadow-sm border border-slate-200 p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i class="fa-solid fa-thermometer-half text-8xl text-orange-600"></i>
+                </div>
+
+                <div class="flex justify-between items-start mb-4 relative z-10">
+                    <div>
+                        <h3 class="text-slate-500 font-medium text-sm uppercase tracking-wider">Temperature</h3>
+                        <div class="flex items-baseline gap-2 mt-2">
+                            <span id="temp-value" class="text-5xl font-bold text-slate-900">--</span>
+                            <span class="text-xl text-slate-400 font-medium">°C</span>
+                        </div>
+                    </div>
+                    <div id="temp-indicator" class="h-12 w-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-600">
+                        <i class="fa-solid fa-temperature-half text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="mt-4 relative z-10">
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div id="temp-bar" class="bg-orange-400 h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between mt-2 text-xs font-medium">
+                        <span id="temp-status-text" class="text-slate-400">Waiting for data...</span>
+                        <span class="text-slate-400">Ideal: 18°C - 26°C</span>
                     </div>
                 </div>
             </div>
@@ -469,7 +499,7 @@
         </div>
 
         <!-- Charts Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                 <h3 class="font-bold text-slate-800 mb-4">CO2 History (Last 20 Points)</h3>
                 <div class="relative h-64 w-full">
@@ -480,6 +510,12 @@
                 <h3 class="font-bold text-slate-800 mb-4">Humidity History (Last 20 Points)</h3>
                 <div class="relative h-64 w-full">
                     <canvas id="humidityChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h3 class="font-bold text-slate-800 mb-4">Temperature History (Last 20 Points)</h3>
+                <div class="relative h-64 w-full">
+                    <canvas id="tempChart"></canvas>
                 </div>
             </div>
         </div>
@@ -514,9 +550,6 @@
                     <div class="bg-blue-50 p-4 rounded-lg flex items-start gap-3">
                         <i class="fa-solid fa-circle-info text-blue-500 mt-1"></i>
                         <div class="text-xs text-blue-700">
-                            <strong>ThingSpeak Configuration:</strong><br>
-                            Field 1 = CO2 (ppm)<br>
-                            Field 2 = Humidity (%)<br><br>
                             <strong>Keyboard Shortcuts:</strong><br>
                             <kbd class="px-1 py-0.5 bg-blue-100 rounded text-xs">Esc</kbd> Close modal<br>
                             <kbd class="px-1 py-0.5 bg-blue-100 rounded text-xs">Ctrl+N</kbd> New location<br>
@@ -680,6 +713,13 @@
             options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: 0, suggestedMax: 100 } } }
         });
 
+        const tempCtx = document.getElementById('tempChart').getContext('2d');
+        const tempChart = new Chart(tempCtx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ data: [], borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.08)', fill: true }] },
+            options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { suggestedMin: -10, suggestedMax: 50 } } }
+        });
+
         function clearCharts() {
             co2Chart.data.labels = [];
             co2Chart.data.datasets[0].data = [];
@@ -690,6 +730,7 @@
 
             // Reset text
             document.getElementById('co2-value').innerText = '--';
+            document.getElementById('temp-value').innerText = '--';
             document.getElementById('humidity-value').innerText = '--';
             document.getElementById('last-update-time').innerText = '--:--:--';
         }
@@ -812,7 +853,7 @@
             const latest = feeds[feeds.length - 1];
             if (latest) {
                 // field1 = CO2, field2 = Temperature, field3 = Humidity
-                updateDashboard(latest.field1, latest.field3, latest.created_at);
+                updateDashboard(latest.field1, latest.field2, latest.field3, latest.created_at);
             }
 
             co2Chart.data.labels = labels;
@@ -824,13 +865,15 @@
             humidityChart.update();
         }
 
-        function updateDashboard(co2, hum, timestamp) {
-            if (co2 == null || hum == null) return;
+        function updateDashboard(co2, temp, hum, timestamp) {
+            if (co2 == null || temp == null || hum == null) return;
 
             const co2Val = Math.round(co2);
+            const tempVal = Math.round(temp);
             const humVal = Math.round(hum);
 
             document.getElementById('co2-value').innerText = co2Val;
+            document.getElementById('temp-value').innerText = tempVal;
             document.getElementById('humidity-value').innerText = humVal;
 
             const date = new Date(timestamp);
