@@ -866,16 +866,19 @@
                     applyWindowFor(chartKey);
                 };
 
-                // Drag to pan
-                let dragging = false;
+                // Drag to pan using pointer events for reliable capture
+                let isDragging = false;
+                let pointerId = null;
                 let lastX = 0;
-                const onMouseDown = (e) => {
-                    dragging = true;
+                const onPointerDown = (e) => {
+                    isDragging = true;
+                    pointerId = e.pointerId;
                     lastX = e.clientX;
+                    try { canvas.setPointerCapture(pointerId); } catch(_) {}
                     canvas.style.cursor = 'grabbing';
                 };
-                const onMouseMove = (e) => {
-                    if (!dragging) return;
+                const onPointerMove = (e) => {
+                    if (!isDragging || e.pointerId !== pointerId) return;
                     const fullLen = (state.fullPoints || []).length;
                     if (!fullLen || !state.size) return;
                     const rect = canvas.getBoundingClientRect();
@@ -885,22 +888,35 @@
                     state.start = Math.max(0, Math.min(fullLen - state.size, (state.start || 0) - deltaIndices));
                     applyWindowFor(chartKey);
                 };
-                const onMouseUp = () => {
-                    dragging = false;
+                const onPointerUp = (e) => {
+                    if (e.pointerId !== pointerId) return;
+                    isDragging = false;
+                    try { canvas.releasePointerCapture(pointerId); } catch(_) {}
+                    pointerId = null;
                     canvas.style.cursor = 'default';
                 };
 
                 canvas.addEventListener('wheel', onWheel, { passive: false });
-                canvas.addEventListener('mousedown', onMouseDown);
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('mouseup', onMouseUp);
+                canvas.addEventListener('pointerdown', onPointerDown);
+                canvas.addEventListener('pointermove', onPointerMove);
+                canvas.addEventListener('pointerup', onPointerUp);
+                canvas.addEventListener('pointercancel', onPointerUp);
+                // double click to reset this chart
+                const onDblClick = () => {
+                    state.start = 0;
+                    state.size = state.fullPoints.length;
+                    applyWindowFor(chartKey);
+                };
+                canvas.addEventListener('dblclick', onDblClick);
 
                 // store cleanup
                 canvas._zoomCleanup = () => {
                     canvas.removeEventListener('wheel', onWheel);
-                    canvas.removeEventListener('mousedown', onMouseDown);
-                    window.removeEventListener('mousemove', onMouseMove);
-                    window.removeEventListener('mouseup', onMouseUp);
+                    canvas.removeEventListener('pointerdown', onPointerDown);
+                    canvas.removeEventListener('pointermove', onPointerMove);
+                    canvas.removeEventListener('pointerup', onPointerUp);
+                    canvas.removeEventListener('pointercancel', onPointerUp);
+                    canvas.removeEventListener('dblclick', onDblClick);
                     delete canvas._zoomCleanup;
                 };
             });
