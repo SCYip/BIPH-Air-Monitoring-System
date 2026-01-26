@@ -904,20 +904,21 @@
                 }
             }
 
-            // Update Temperature if provided
+            // Update Temperature if provided (display with one decimal place)
             if (temp !== null && temp !== undefined && !isNaN(temp)) {
-                const tempVal = Math.round(temp);
-                document.getElementById('temp-value').innerText = tempVal;
+                const tempNum = Number(temp);
+                const tempDisplay = tempNum.toFixed(1);
+                document.getElementById('temp-value').innerText = tempDisplay;
                 const tempBar = document.getElementById('temp-bar');
                 const tempText = document.getElementById('temp-status-text');
                 // scale temp for bar width (approx between -10 to 50)
-                const percent = Math.min(100, Math.max(0, ((tempVal + 10) / 60) * 100));
+                const percent = Math.min(100, Math.max(0, ((tempNum + 10) / 60) * 100));
                 tempBar.style.width = `${percent}%`;
-                if (tempVal >= 18 && tempVal <= 26) {
+                if (tempNum >= 18 && tempNum <= 26) {
                     tempText.innerText = "Comfortable";
                     tempText.className = "text-green-600 font-bold";
                 } else {
-                    tempText.innerText = tempVal < 18 ? "Cool" : "Warm";
+                    tempText.innerText = tempNum < 18 ? "Cool" : "Warm";
                     tempText.className = "text-orange-600 font-bold";
                 }
             }
