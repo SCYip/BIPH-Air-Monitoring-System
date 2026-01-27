@@ -603,21 +603,32 @@
         }
 
         function toggleSettings() {
-            if(currentLocId) {
-                openEditModal(currentLocId);
+            const modal = document.getElementById('settings-modal');
+            if (!modal) return;
+            if (!modal.classList.contains('hidden')) {
+                // hide
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
             } else {
-                document.getElementById('settings-modal').classList.add('hidden');
+                // show for current location
+                if (currentLocId) openEditModal(currentLocId);
             }
         }
 
-        function openEditModal(id, isNew = false) {
+        async function openEditModal(id, isNew = false) {
             const modal = document.getElementById('settings-modal');
-            const loc = locationManager.getLocationById(id) || { id: id, name: '', channelId: '', readKey: '' };
+            if (!modal) return;
+
+            let loc = null;
+            try {
+                loc = await locationManager.getLocationById(id);
+            } catch (_) { loc = null; }
+            loc = loc || { id: id, name: '', channelId: '', readKey: '' };
 
             document.getElementById('edit-id').value = id;
-            document.getElementById('loc-name-input').value = loc.name;
-            document.getElementById('channel-id-input').value = loc.channelId;
-            document.getElementById('api-key-input').value = loc.readKey;
+            document.getElementById('loc-name-input').value = loc.name || '';
+            document.getElementById('channel-id-input').value = loc.channelId || '';
+            document.getElementById('api-key-input').value = loc.readKey || '';
 
             document.getElementById('modal-title').innerText = isNew ? "Add Location" : "Edit Location";
             document.getElementById('delete-btn').style.display = isNew ? 'none' : 'block';
@@ -715,15 +726,15 @@
 
         // Chart state per series to enable independent zooming/panning
         const chartState = {
-            co2: { ctx: co2Ctx, chart: null, fullPoints: [], start: 0, size: 0, color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)', clampMin: 0, clampMax: undefined },
-            temp: { ctx: tempCtx, chart: null, fullPoints: [], start: 0, size: 0, color: '#f97316', bg: 'rgba(249, 115, 22, 0.08)', clampMin: -10, clampMax: 50 },
-            hum:  { ctx: humCtx,  chart: null, fullPoints: [], start: 0, size: 0, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)', clampMin: 0, clampMax: 100 }
+            co2: { ctx: co2Ctx, chart: null, fullPoints: [], start: 0, size: 0, color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)', clampMin: 0, clampMax: undefined, label: 'CO2 (ppm)' },
+            temp: { ctx: tempCtx, chart: null, fullPoints: [], start: 0, size: 0, color: '#f97316', bg: 'rgba(249, 115, 22, 0.08)', clampMin: -10, clampMax: 50, label: 'Temperature (°C)' },
+            hum:  { ctx: humCtx,  chart: null, fullPoints: [], start: 0, size: 0, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)', clampMin: 0, clampMax: 100, label: 'Humidity (%)' }
         };
 
-        function createChartInstance(ctx, points, color, bgColor, yRange, xRange) {
+        function createChartInstance(ctx, points, color, bgColor, yRange, xRange, datasetLabel) {
             return new Chart(ctx, {
                 type: 'line',
-                data: { datasets: [{ data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] },
+                data: { datasets: [{ label: datasetLabel || '', data: points || [], borderColor: color, backgroundColor: bgColor, fill: true, parsing: false }] },
                 options: {
                     ...commonChartOptions,
                     scales: {
@@ -833,7 +844,9 @@
                 const points = state.fullPoints || [];
                 const yRange = computeRange(points, 0.12, state.clampMin, state.clampMax);
                 try { if (state.chart) state.chart.destroy(); } catch (_) {}
-                state.chart = createChartInstance(state.ctx, points, state.color, state.bg, yRange, state.todayRange);
+                state.chart = createChartInstance(state.ctx, points, state.color, state.bg, yRange, state.todayRange, state.label);
+                // reattach pan handlers for recreated canvas
+                attachPanHandlers();
             } catch (e) {
                 console.warn('resetChart failed', e);
             }
@@ -1260,7 +1273,7 @@
                 const points = state.fullPoints || [];
                 const yRange = computeRange(points, 0.12, state.clampMin, state.clampMax);
                 if (!state.chart) {
-                    state.chart = createChartInstance(state.ctx, points, state.color, state.bg, yRange, state.todayRange);
+                    state.chart = createChartInstance(state.ctx, points, state.color, state.bg, yRange, state.todayRange, state.label);
                 } else {
                     // update dataset in-place
                     try {
