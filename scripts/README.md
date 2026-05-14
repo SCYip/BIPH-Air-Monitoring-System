@@ -5,9 +5,24 @@ zero dependencies — they talk to Firebase over the REST API.
 
 | Script | What it does |
 |---|---|
-| `archive-weekdays.mjs` | Copies weekday (Mon–Fri) readings out of `Devices/<id>/Readings` into permanent storage: repo files under `archive/<id>/<date>.json` **and** the Firebase `Archive/<id>/<date>` node. Idempotent — re-running only adds days that aren't archived yet. |
+| `archive-weekdays.mjs` | Copies weekday (Mon–Fri) readings out of `Devices/<id>/Readings` into permanent storage. Idempotent — re-running only adds days that aren't archived yet. |
 | `cleanup-old-readings.mjs` | Deletes raw readings older than `RETENTION_DAYS` (default 14) from `Devices/<id>/Readings`. **Never touches `Archive`.** Dry-run unless `DRY_RUN=false`. |
 | `lib/firebase-rest.mjs` | Tiny shared REST client for the Realtime Database. |
+
+### What the archive produces
+
+`archive-weekdays.mjs` writes the weekday data to three places:
+
+| Where | Path | Format |
+|---|---|---|
+| Repo — analysis dataset | `archive/<id>.csv` | One **combined CSV per device**: every weekday reading as a row. Columns: `timestamp, datetime, date, weekday, co2_ppm, temp_c, hum_pct`. Open in Excel / R / Python. Rebuilt from scratch every run. |
+| Repo — per-day record | `archive/<id>/<date>.json` | One JSON file per weekday with the full readings + a min/avg/max summary. |
+| Firebase | `Archive/<id>/<date>` | Same structure as the per-day JSON. |
+
+> The CSV is the **raw** archived record — outlier spikes are **not** filtered
+> out of it (the dashboard only hides them for display). That's deliberate: a
+> research dataset should be the unmodified data, with cleaning done — and
+> documented — in your own analysis.
 
 ## Automation (GitHub Actions)
 

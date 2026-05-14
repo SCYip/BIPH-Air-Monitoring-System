@@ -3,9 +3,14 @@
 // archive-weekdays.mjs
 //
 // Archives weekday (Mon–Fri) sensor readings out of the live `Devices/<id>/
-// Readings` node into two durable places:
-//   1. repo files     -> archive/<deviceId>/<YYYY-MM-DD>.json
-//   2. Firebase       -> Archive/<deviceId>/<YYYY-MM-DD>
+// Readings` node into durable, analysis-ready storage:
+//   1. repo, per-day JSON  -> archive/<deviceId>/<YYYY-MM-DD>.json
+//   2. repo, combined CSV  -> archive/<deviceId>.csv   (every weekday reading,
+//                             one row each — open in Excel / R / Python)
+//   3. Firebase            -> Archive/<deviceId>/<YYYY-MM-DD>
+//
+// The combined CSV is rebuilt from the per-day JSON on every run, so it always
+// reflects the full archive even when no new day was added.
 //
 // It is idempotent and self-healing: every run archives any *complete* weekday
 // inside the configured window that isn't archived yet. So the very first run
@@ -24,7 +29,7 @@
 //   node scripts/archive-weekdays.mjs
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { writeFile, mkdir, access } from 'node:fs/promises';
+import { writeFile, mkdir, access, readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dbGet, dbPut, hasSecret } from './lib/firebase-rest.mjs';
@@ -72,6 +77,54 @@ function summarise(values) {
 
 async function fileExists(p) {
   try { await access(p); return true; } catch { return false; }
+}
+
+// ── combined CSV ────────────────────────────────────────────────────────────
+
+// Format a UNIX timestamp as an ISO-8601 string in the configured local zone,
+// e.g. 1778601639 -> "2026-05-13T22:00:39+08:00".
+function toLocalISO(unixSeconds) {
+  const shifted = new Date((unixSeconds + TZ_OFFSET_HOURS * 3600) * 1000);
+  const base = shifted.toISOString().slice(0, 19); // YYYY-MM-DDTHH:MM:SS
+  const sign = TZ_OFFSET_HOURS >= 0 ? '+' : '-';
+  const abs = Math.abs(TZ_OFFSET_HOURS);
+  const hh = String(Math.floor(abs)).padStart(2, '0');
+  const mm = String(Math.round((abs % 1) * 60)).padStart(2, '0');
+  return `${base}${sign}${hh}:${mm}`;
+}
+
+const CSV_HEADER = 'timestamp,datetime,date,weekday,co2_ppm,temp_c,hum_pct';
+
+// Rebuild archive/<deviceId>.csv from every per-day JSON file for that device —
+// one row per reading, chronological. Returns the row count.
+async function rebuildDeviceCsv(deviceId) {
+  const dir = join(ARCHIVE_DIR, deviceId);
+  let files;
+  try {
+    files = (await readdir(dir)).filter((f) => f.endsWith('.json')).sort();
+  } catch {
+    return 0; // no per-day archive for this device yet
+  }
+  const lines = [];
+  for (const file of files) {
+    const day = JSON.parse(await readFile(join(dir, file), 'utf8'));
+    for (const r of day.readings || []) {
+      lines.push([
+        r.timestamp,
+        toLocalISO(r.timestamp),
+        day.date,
+        day.weekday,
+        r.co2 ?? '',
+        r.temp ?? '',
+        r.hum ?? '',
+      ].join(','));
+    }
+  }
+  await writeFile(
+    join(ARCHIVE_DIR, `${deviceId}.csv`),
+    [CSV_HEADER, ...lines].join('\n') + '\n',
+  );
+  return lines.length;
 }
 
 // ── main ────────────────────────────────────────────────────────────────────
@@ -156,6 +209,11 @@ async function main() {
       written++;
       console.log(`  ✓ ${deviceId}/${date} (${payload.weekday}) — ${rows.length} readings`);
     }
+
+    // Always rebuild the combined CSV so it reflects the full archive,
+    // even on runs where no new day was added.
+    const csvRows = await rebuildDeviceCsv(deviceId);
+    if (csvRows > 0) console.log(`  ⤓ ${deviceId}.csv — ${csvRows} rows`);
   }
 
   console.log(`▶ done. ${written} day(s) archived, ${skipped} already up to date.`);
