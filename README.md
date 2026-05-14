@@ -1,4 +1,4 @@
-# BIPH 空气质量监测仪表板
+# BIPH AQS · 空气质量监测系统
 
 一个现代化的空气质量实时监控仪表板，基于 React + Vite 构建，集成 Firebase Realtime Database，支持多设备管理、实时数据卡片和历史趋势图表。
 
@@ -9,15 +9,26 @@
   - CO₂: 绿色 (`<800ppm`) / 黄色 (`800-1500ppm`) / 红色 (`>1500ppm`)
   - 温度: 冷/舒适/热状态指示
   - 湿度: 干燥/舒适/潮湿状态指示
-- **历史趋势图表** — 使用 Chart.js 渲染平滑折线图，支持数据点悬停详情
+- **历史趋势图表** — 使用 Chart.js 渲染平滑折线图，支持滚轮缩放、拖拽平移与数据点悬停详情
 - **时间过滤** — 自由切换「24小时」或「7天」数据视图
 - **自动刷新** — 每 10 秒自动拉取最新数据
 - **响应式布局** — 适配桌面端与移动端
-- **演示模式** — 无需真实传感器，点击「Try Demo」即可查看模拟数据演示
 - **空气质量评分** — 首页显示综合 AQI 环形评分卡
 - **Sparkline 趋势** — 设备卡片附带 CO₂ 迷你趋势线
 - **数据导出** — 支持下载 CSV / JSON 历史数据
 - **空气质量警报** — CO₂ / 温度异常时自动提示
+- **管理员模式** — 登录后可添加 / 删除传感器设备
+
+## 硬件
+
+每个传感器节点由以下部件组成：
+
+- **Sensirion SCD30** — NDIR CO₂ 传感器，内置温度与湿度补偿
+- **Waveshare ESP32-S3 Zero** — 紧凑型 Wi-Fi 微控制器
+- **状态 LED** — 绿 / 黄 / 红，直观反映本地空气质量
+- **OLED 显示屏** — 在设备端直接显示实时读数
+
+数据链路：传感器 → ESP32 → Wi-Fi → Firebase Realtime Database → React/Vite 仪表板。
 
 ## 数据库结构
 
@@ -42,21 +53,6 @@
 
 > `timestamp` 为标准 UNIX 时间戳（秒，UTC）。每个 reading 使用 Firebase `push()` 生成的唯一 Key。
 
-## 演示模式（无需真实传感器）
-
-点击导航栏中的 **"Try Demo"** 按钮，即可加载预置的 6 个模拟传感器（图书馆、实验室、食堂、体育馆、行政办公室、音乐室），实时查看模拟数据演示，包括：
-
-- CO₂ 模拟数据，带日间变化趋势（使用时段更高）
-- 每 3 秒自动更新最新读数
-- 真实的温度、湿度变化曲线
-- 所有图表、趋势线、告警功能完全可用
-
-如需永久开启演示模式，可在浏览器控制台执行：
-```js
-localStorage.setItem('biph-demo', '1'); location.reload();
-```
-点击页面顶部的 **"Exit Demo"** 横幅可随时退出演示模式。
-
 ## 安装与运行
 
 ### 前置条件
@@ -67,8 +63,7 @@ localStorage.setItem('biph-demo', '1'); location.reload();
 ### 步骤 1: 安装依赖
 
 ```bash
-cd "d:/Environmental Engineerig Club/AirMonitoringSystem/BIPH-Air-Monitoring-System"
-
+cd BIPH-Air-Monitoring-System
 npm install
 ```
 
@@ -98,30 +93,43 @@ npm run build
 npm run preview
 ```
 
+## 部署
+
+仓库已包含 `netlify.toml`，可直接部署到 Netlify：
+
+- 构建命令：`npm run build`
+- 发布目录：`dist`
+- 已配置 SPA 回退路由（所有路径回退到 `index.html`）
+
 ## 项目结构
 
 ```
 ├── index.html               # HTML 入口
+├── netlify.toml             # Netlify 部署配置
 ├── package.json             # 依赖与脚本
 ├── vite.config.js           # Vite 配置
 ├── tailwind.config.js       # Tailwind CSS 配置
 ├── postcss.config.js        # PostCSS 配置
+├── app.py                   # 可选的本地静态服务器（Python）
 ├── public/
 └── src/
     ├── main.jsx             # React 入口
     ├── App.jsx              # 根组件
-    ├── index.css            # 全局样式 + Tailwind
+    ├── index.css            # 全局样式 + Tailwind + 设计系统
     ├── firebase/
     │   └── config.js        # Firebase 初始化与数据库操作
     ├── components/
-    │   ├── Dashboard.jsx    # 主仪表板页面
-    │   ├── DeviceSelector.jsx  # 设备选择器
-    │   ├── MetricCard.jsx   # 指标卡片 (CO₂/温度/湿度)
-    │   ├── HistoricalChart.jsx # 历史折线图
-    │   ├── TimeFilter.jsx   # 时间范围过滤器
-    │   └── StatusBadge.jsx  # 系统状态徽章
+    │   ├── Dashboard.jsx        # 主仪表板页面
+    │   ├── DeviceSelector.jsx   # 设备选择器
+    │   ├── MetricCard.jsx       # 指标卡片 (CO₂/温度/湿度)
+    │   ├── HistoricalChart.jsx  # 历史折线图
+    │   ├── TimeFilter.jsx       # 时间范围过滤器
+    │   ├── StatusBadge.jsx      # 系统状态徽章
+    │   ├── AdminAuth.jsx        # 管理员登录
+    │   └── AddDeviceModal.jsx   # 添加 / 删除设备弹窗
     └── utils/
-        └── dateUtils.js     # 日期时间格式化工具
+        ├── dateUtils.js     # 日期时间格式化工具
+        └── sparkline.js     # Sparkline 路径生成
 ```
 
 ## 技术栈
@@ -131,8 +139,8 @@ npm run preview
 | 框架 | React 18 + Vite 6 |
 | 样式 | Tailwind CSS 3 |
 | 图表 | Chart.js 4 + react-chartjs-2 |
+| 图表交互 | chartjs-plugin-zoom（缩放 / 平移） |
 | 数据库 | Firebase JS SDK v10 (Realtime Database) |
-| 时间处理 | date-fns + chartjs-adapter-date-fns |
 
 ## ESP32 数据上传示例
 
