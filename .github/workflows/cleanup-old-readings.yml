@@ -1,0 +1,38 @@
+name: Cleanup old readings
+
+# Deletes raw readings older than RETENTION_DAYS from Devices/<id>/Readings so
+# the Realtime Database stays small. Never touches the Archive node.
+#
+# Scheduled runs delete for real. Manual runs default to a dry run — flip the
+# "dry_run" input to false to actually delete from a manual trigger.
+
+on:
+  schedule:
+    # Sundays 19:30 UTC — weekly is plenty for a 14-day retention window.
+    - cron: '30 19 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (true = preview only, false = actually delete)'
+        type: boolean
+        default: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Delete old readings
+        env:
+          FIREBASE_DB_SECRET: ${{ secrets.FIREBASE_DB_SECRET }}
+          RETENTION_DAYS: '14'
+          # Scheduled run -> real delete. Manual run -> honour the dry_run input.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+        run: node scripts/cleanup-old-readings.mjs
