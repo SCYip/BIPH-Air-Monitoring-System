@@ -2,6 +2,8 @@ import { initializeApp } from 'firebase/app';
 import {
   getDatabase,
   ref,
+  query,
+  limitToLast,
   onValue,
   off,
   get,
@@ -43,11 +45,12 @@ export function getDevicesRef() {
   return ref(db, 'Devices');
 }
 
+// Push keys are chronological, so limitToLast() returns the most recent
+// readings ordered by key — no `.indexOn` index required.
 export function getDeviceReadingsRef(deviceId) {
   const { database: db } = initFirebase();
   return query(
     ref(db, `Devices/${deviceId}/Readings`),
-    orderByChild('timestamp'),
     limitToLast(1000)
   );
 }
@@ -72,7 +75,15 @@ export function subscribeToDevices(callback) {
 
 export function subscribeToDeviceReadings(deviceId, timeRange, callback) {
   const { database: db } = initFirebase();
-  const readingsRef = ref(db, `Devices/${deviceId}/Readings`);
+  // Only pull the most recent slice instead of the entire history. Sensors
+  // push ~1 reading/min, so these bounds cover the requested window plus a
+  // generous buffer (incl. the 48h fallback below). limitToLast() orders by
+  // push key (chronological) — no `.indexOn` index needed.
+  const limit = timeRange === '7d' ? 11000 : 3200;
+  const readingsQuery = query(
+    ref(db, `Devices/${deviceId}/Readings`),
+    limitToLast(limit),
+  );
 
   let isActive = true;
 
@@ -91,7 +102,7 @@ export function subscribeToDeviceReadings(deviceId, timeRange, callback) {
         startAt = startOfToday;
       }
 
-      const snapshot = await get(readingsRef);
+      const snapshot = await get(readingsQuery);
       if (!isActive) return;
 
       if (!snapshot.exists()) {
@@ -141,7 +152,13 @@ export async function fetchDevices() {
 
 export async function fetchDeviceReadings(deviceId, timeRange = '24h') {
   const { database: db } = initFirebase();
-  const readingsRef = ref(db, `Devices/${deviceId}/Readings`);
+  // See subscribeToDeviceReadings — fetch a bounded recent slice, not the
+  // whole node. limitToLast() orders by chronological push key.
+  const limit = timeRange === '7d' ? 11000 : 3200;
+  const readingsQuery = query(
+    ref(db, `Devices/${deviceId}/Readings`),
+    limitToLast(limit),
+  );
 
   const now = new Date();
   const localOffset = now.getTimezoneOffset() * 60_000;
@@ -154,7 +171,7 @@ export async function fetchDeviceReadings(deviceId, timeRange = '24h') {
     startAt = startOfToday;
   }
 
-  const snapshot = await get(readingsRef);
+  const snapshot = await get(readingsQuery);
   const readings = [];
   if (snapshot.exists()) {
     snapshot.forEach((child) => {
