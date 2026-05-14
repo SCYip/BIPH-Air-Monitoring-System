@@ -39,6 +39,44 @@ const TITLES = {
 
 const UNITS = { co2: 'ppm', temp: '°C', hum: '%' };
 
+// ── outlier rejection ───────────────────────────────────────────────────────
+// A single bad sensor reading (e.g. a 31,000 ppm CO₂ spike) blows up the
+// Y-axis and flattens every real data point into a thin line at the bottom.
+// We drop these before charting using two checks:
+//   1. hard physical sanity bounds — values a real sensor can't produce, and
+//   2. a robust MAD-based modified z-score — contextual spikes far outside
+//      the bulk of the data (robust to outliers, unlike mean/stddev).
+// Rejected points become null: a small gap in the line, and they're left out
+// of the min / avg / max summary.
+
+const PHYSICAL_BOUNDS = {
+  // SCD30 reliable range tops out ~10k ppm; indoor air never realistically
+  // exceeds that. Temp/humidity bounds are generous physical limits.
+  co2:  { min: 0,   max: 10000 },
+  temp: { min: -20, max: 70 },
+  hum:  { min: 0,   max: 100 },
+};
+const MAD_THRESHOLD = 6; // modified z-score cutoff — only catches extreme spikes
+
+function median(values) {
+  if (values.length === 0) return NaN;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Returns a predicate isOutlier(value) for the given metric + sample set.
+function buildOutlierTest(values, type) {
+  const bounds = PHYSICAL_BOUNDS[type] || { min: -Infinity, max: Infinity };
+  const med = median(values);
+  const mad = median(values.map((v) => Math.abs(v - med)));
+  return (v) => {
+    if (v < bounds.min || v > bounds.max) return true;
+    if (mad > 0 && (0.6745 * Math.abs(v - med)) / mad > MAD_THRESHOLD) return true;
+    return false;
+  };
+}
+
 function EmptyState() {
   return (
     <div className="h-72 flex items-center justify-center">
@@ -76,10 +114,22 @@ export default function HistoricalChart({ type, data, timeRange, loading }) {
     }
   }, []);
 
+  // Per-row metric values with outliers removed (set to null). Shared by the
+  // chart and the min/avg/max summary so both ignore bad sensor spikes.
+  const series = useMemo(() => {
+    const raw = data.map((d) => (isFinite(d[type]) ? d[type] : null));
+    const finite = raw.filter((v) => v !== null);
+    const isOutlier = buildOutlierTest(finite, type);
+    const clean = raw.map((v) => (v !== null && !isOutlier(v) ? v : null));
+    const cleanFinite = clean.filter((v) => v !== null);
+    const outlierCount = finite.length - cleanFinite.length;
+    return { clean, cleanFinite, outlierCount };
+  }, [data, type]);
+
   const chartData = useMemo(() => {
     const labels = data.map((d) => formatLabel(new Date(d.timestamp * 1000), timeRange));
-    const values = data.map((d) => isFinite(d[type]) ? d[type] : null);
-    const validCount = values.filter(isFinite).length;
+    const values = series.clean;
+    const validCount = series.cleanFinite.length;
     return {
       labels,
       datasets: [{
@@ -102,10 +152,10 @@ export default function HistoricalChart({ type, data, timeRange, loading }) {
         spanGaps: false,
       }],
     };
-  }, [data, timeRange, type, cfg]);
+  }, [data, timeRange, type, cfg, series]);
 
   const stats = useMemo(() => {
-    const values = data.map((d) => d[type]).filter(isFinite);
+    const values = series.cleanFinite;
     if (values.length === 0) return null;
     return {
       min: Math.min(...values),
@@ -113,7 +163,7 @@ export default function HistoricalChart({ type, data, timeRange, loading }) {
       avg: values.reduce((a, b) => a + b, 0) / values.length,
       latest: values[values.length - 1],
     };
-  }, [data, type]);
+  }, [series]);
 
   const options = useMemo(() => ({
     responsive: true,
@@ -195,7 +245,14 @@ export default function HistoricalChart({ type, data, timeRange, loading }) {
           />
           <div>
             <h3 className="text-base font-semibold text-ink-900 tracking-tight">{TITLES[type]}</h3>
-            <p className="text-xs text-ink-500 mt-0.5">Past {timeRange === '24h' ? '24 hours' : '7 days'} · {data.length} samples</p>
+            <p className="text-xs text-ink-500 mt-0.5">
+              Past {timeRange === '24h' ? '24 hours' : '7 days'} · {data.length} samples
+              {series.outlierCount > 0 && (
+                <span className="text-amber-600">
+                  {' · '}{series.outlierCount} spike{series.outlierCount > 1 ? 's' : ''} hidden
+                </span>
+              )}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-5">
