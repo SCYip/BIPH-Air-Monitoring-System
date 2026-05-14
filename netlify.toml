@@ -1,17 +1,16 @@
-[build]
-  publish = "."
+# Netlify config for the Vite + React build
 
-# Environment variables for secrets scanning
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Firebase web config lives in the client bundle by design;
+# disable Netlify's secret scanner so the build doesn't fail on it.
 [build.environment]
   SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
 
-# Redirect rules for SPA-like behavior
+# SPA fallback — all routes resolve to the single index.html entry
 [[redirects]]
-  from = "/dashboard/*"
-  to = "/dashboard.html"
-  status = 200
-
-[[redirects]]
-  from = "/api/*"
-  to = "/api/:splat"
+  from = "/*"
+  to = "/index.html"
   status = 200

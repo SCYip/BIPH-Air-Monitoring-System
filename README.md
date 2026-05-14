@@ -1,248 +1,191 @@
-# Campus Air Quality Monitor
+# BIPH 空气质量监测仪表板
 
-A modern web application for monitoring campus air quality using ThingSpeak integration.
+一个现代化的空气质量实时监控仪表板，基于 React + Vite 构建，集成 Firebase Realtime Database，支持多设备管理、实时数据卡片和历史趋势图表。
 
-## Features
+## 功能特性
 
-- **Real-time Air Quality Monitoring**: CO2 levels and humidity tracking
-- **Multiple Locations**: Support for multiple monitoring locations
-- **ThingSpeak Integration**: Connects to ThingSpeak channels for data retrieval
-- **Data Persistence**: Locations and configuration stored locally
-- **Responsive Design**: Works on desktop and mobile devices
-- **CRUD Operations**: Create, read, update, and delete location configurations
+- **多设备支持** — 自动发现 Firebase 中的所有传感器设备，支持设备切换
+- **实时数据卡片** — 大字号展示 CO₂、温度、湿度三大核心指标，颜色编码直观反映空气质量状态
+  - CO₂: 绿色 (`<800ppm`) / 黄色 (`800-1500ppm`) / 红色 (`>1500ppm`)
+  - 温度: 冷/舒适/热状态指示
+  - 湿度: 干燥/舒适/潮湿状态指示
+- **历史趋势图表** — 使用 Chart.js 渲染平滑折线图，支持数据点悬停详情
+- **时间过滤** — 自由切换「24小时」或「7天」数据视图
+- **自动刷新** — 每 10 秒自动拉取最新数据
+- **响应式布局** — 适配桌面端与移动端
+- **演示模式** — 无需真实传感器，点击「Try Demo」即可查看模拟数据演示
+- **空气质量评分** — 首页显示综合 AQI 环形评分卡
+- **Sparkline 趋势** — 设备卡片附带 CO₂ 迷你趋势线
+- **数据导出** — 支持下载 CSV / JSON 历史数据
+- **空气质量警报** — CO₂ / 温度异常时自动提示
 
-## Project Structure
+## 数据库结构
 
-```
-campus-air-monitor/
-├── index.html                   # Home page with location selection
-├── dashboard.html               # Dashboard page for monitoring
-├── js/
-│   └── data-manager.js          # Data management module with CRUD operations
-├── data/
-│   └── locations.json           # Location data storage
-├── app.py                       # Python Flask server (local development)
-├── netlify.toml                 # Netlify deployment configuration
-└── README.md                    # This documentation
-```
+仪表板从 Firebase Realtime Database 读取数据，期望的数据结构如下：
 
-## Setup
-
-1. Open `index.html` in a web browser
-2. Configure locations with ThingSpeak channel IDs and read API keys
-3. Click on location cards to view real-time data
-
-## ThingSpeak Configuration
-
-Each location requires:
-- **Channel ID**: Numeric ID of your ThingSpeak channel
-- **Read API Key**: API key with read permissions
-
-Data fields should be configured as:
-- Field 1: CO2 level (ppm)
-- Field 2: Humidity (%)
-
-## JavaScript API
-
-The `data-manager.js` file provides a comprehensive API for managing locations:
-
-### LocationManager Class
-
-```javascript
-const manager = new LocationManager();
-
-// CRUD Operations
-manager.createLocation({ name: "New Location", channelId: "123", readKey: "abc" });
-manager.getLocationById("loc_1");
-manager.updateLocation("loc_1", { name: "Updated Name" });
-manager.deleteLocation("loc_1");
-manager.getAllLocations();
-
-// Utility Functions
-manager.exportToJSON(); // Export all locations as JSON
-manager.importFromJSON(jsonString); // Import locations from JSON
-manager.searchLocations("library"); // Search locations by name
-manager.getConfiguredLocations(); // Get locations with valid config
+```json
+{
+  "Devices": {
+    "Sensor_Node_01": {
+      "Readings": {
+        "-O1aBcDeFgHiJkLm": {
+          "co2": 850,
+          "temp": 24.5,
+          "hum": 60.1,
+          "timestamp": 1715000000
+        }
+      }
+    }
+  }
+}
 ```
 
-### Global Functions
+> `timestamp` 为标准 UNIX 时间戳（秒，UTC）。每个 reading 使用 Firebase `push()` 生成的唯一 Key。
 
-For convenience, these functions are also available globally:
+## 演示模式（无需真实传感器）
 
-```javascript
-createLocation("Library", "123456", "API_KEY_HERE");
-getLocation("loc_1");
-updateLocation("loc_1", { name: "Main Library" });
-deleteLocation("loc_1");
-listLocations(); // Returns all locations
-exportLocations(); // Export as JSON string
-importLocations(jsonString); // Import from JSON string
+点击导航栏中的 **"Try Demo"** 按钮，即可加载预置的 6 个模拟传感器（图书馆、实验室、食堂、体育馆、行政办公室、音乐室），实时查看模拟数据演示，包括：
+
+- CO₂ 模拟数据，带日间变化趋势（使用时段更高）
+- 每 3 秒自动更新最新读数
+- 真实的温度、湿度变化曲线
+- 所有图表、趋势线、告警功能完全可用
+
+如需永久开启演示模式，可在浏览器控制台执行：
+```js
+localStorage.setItem('biph-demo', '1'); location.reload();
 ```
+点击页面顶部的 **"Exit Demo"** 横幅可随时退出演示模式。
 
-### ThingSpeak Testing
+## 安装与运行
 
-```javascript
-testThingSpeakConnection("123456", "API_KEY").then(result => {
-    console.log(result.success); // true/false
-    console.log(result.message); // Status message
-    console.log(result.hasData); // Whether channel has data
-});
-```
+### 前置条件
 
-## Keyboard Shortcuts
+- Node.js 18+
+- npm 9+
 
-- `Esc` - Close settings modal
-- `Ctrl+N` - Create new location
-- `Ctrl+H` - Go back to home/map view
+### 步骤 1: 安装依赖
 
-## Data Storage
-
-- Locations are stored in browser localStorage as JSON
-- Default locations are loaded from `locations.json` template
-- Data persists between browser sessions
-
-## Optimizations Added
-
-- **Error Handling**: Comprehensive error handling for API calls and data operations
-- **Loading States**: Visual feedback during data fetching
-- **Form Validation**: Input validation for location configuration
-- **Keyboard Shortcuts**: Improved accessibility and user experience
-- **Modular Code**: Separated data management into reusable module
-- **Better UX**: Loading indicators, status messages, and user guidance
-
-## Prerequisites
-
-### Local Development
-Install Flask for local development:
 ```bash
-pip install flask
+cd "d:/Environmental Engineerig Club/AirMonitoringSystem/BIPH-Air-Monitoring-System"
+
+npm install
 ```
-or
+
+### 步骤 2: 配置 Firebase（可选）
+
+Firebase 配置已内置在 `src/firebase/config.js` 中。如需更换数据库，请编辑该文件中的 `firebaseConfig` 对象。
+
+### 步骤 3: 启动开发服务器
+
 ```bash
-pip3 install flask
+npm run dev
 ```
 
-### Firebase Setup (Required for Data Storage)
+访问终端输出的本地地址（通常是 `http://localhost:5173`）。
 
-1. **Create a Firebase Project:**
-   - Go to [Firebase Console](https://console.firebase.google.com/)
-   - Click "Create a project" (or select existing)
-   - Enable Firestore Database
+### 构建生产版本
 
-2. **Get Firebase Configuration:**
-   - Go to Project Settings → General → Your apps
-   - Click "Add app" → Web app (</>)
-   - Copy the config object
-
-3. **Firebase Config Status:**
-   ✅ **Already configured** with your `biph-aqs` Firebase project!
-
-   The Firebase configuration is already set up in both HTML files with your project credentials.
-
-4. **Firestore Security Rules:**
-   Add these rules in Firebase Console → Firestore → Rules:
-
-   **Important:** Use these **exact** rules (they include the proper syntax):
-
-   ```
-   rules_version = '2';
-   service cloud.firestore {
-     match /databases/{database}/documents {
-       match /{document=**} {
-         allow read, write: if true;
-       }
-     }
-   }
-   ```
-
-   **Alternative (more specific):**
-   ```
-   rules_version = '2';
-   service cloud.firestore {
-     match /databases/{database}/documents {
-       match /locations/{document} {
-         allow read, write: if true;
-       }
-     }
-   }
-   ```
-
-   **Note:** Make sure the closing braces are properly matched. The error you're seeing suggests a missing `}` at the end.
-
-## How to Run
-
-### 🚀 Local Web Server (Recommended)
-
-The application now runs on a local Flask web server for proper web application functionality.
-
-#### Local Development (Flask)
 ```bash
-python app.py
+npm run build
 ```
-or
+
+构建产物将输出到 `dist/` 目录。
+
+### 预览生产版本
+
 ```bash
-python3 app.py
+npm run preview
 ```
 
-### 🌐 Local Development
+## 项目结构
 
-- **URL**: http://localhost:5000
-- **Auto-opens**: Browser automatically opens when server starts
-- **Stop**: Press `Ctrl+C` in terminal to stop the server
+```
+├── index.html               # HTML 入口
+├── package.json             # 依赖与脚本
+├── vite.config.js           # Vite 配置
+├── tailwind.config.js       # Tailwind CSS 配置
+├── postcss.config.js        # PostCSS 配置
+├── public/
+└── src/
+    ├── main.jsx             # React 入口
+    ├── App.jsx              # 根组件
+    ├── index.css            # 全局样式 + Tailwind
+    ├── firebase/
+    │   └── config.js        # Firebase 初始化与数据库操作
+    ├── components/
+    │   ├── Dashboard.jsx    # 主仪表板页面
+    │   ├── DeviceSelector.jsx  # 设备选择器
+    │   ├── MetricCard.jsx   # 指标卡片 (CO₂/温度/湿度)
+    │   ├── HistoricalChart.jsx # 历史折线图
+    │   ├── TimeFilter.jsx   # 时间范围过滤器
+    │   └── StatusBadge.jsx  # 系统状态徽章
+    └── utils/
+        └── dateUtils.js     # 日期时间格式化工具
+```
 
-## 🚀 Deployment Options
+## 技术栈
 
-### Netlify (Static Site)
-1. **Configure Firebase** (see Prerequisites above)
-2. Upload the entire project folder to Netlify
-3. Netlify automatically uses `netlify.toml` configuration
-4. The root directory serves as the website root
+| 类别 | 技术 |
+|---|---|
+| 框架 | React 18 + Vite 6 |
+| 样式 | Tailwind CSS 3 |
+| 图表 | Chart.js 4 + react-chartjs-2 |
+| 数据库 | Firebase JS SDK v10 (Realtime Database) |
+| 时间处理 | date-fns + chartjs-adapter-date-fns |
 
-**Note:** Firebase configuration is required for data storage to work on Netlify.
+## ESP32 数据上传示例
 
-### Other Platforms
-- **Heroku**: Deploy the Flask app (`app.py`)
-- **Railway**: Python deployment with Flask
-- **Render**: Free Flask hosting
+如果你是 ESP32 端开发者，参考以下 Arduino 代码片段向 Firebase 推送数据：
 
-### 📁 File Structure
+```cpp
+#include <FirebaseESP32.h>
+#include <WiFi.h>
 
-The server serves files from the following routes:
-- `/` - Home page (location selection)
-- `/dashboard` - Dashboard page
-- `/dashboard/<location>` - Dashboard with specific location
-- `/js/<filename>` - JavaScript files
-- `/data/<filename>` - Data files
+#define DATABASE_URL "biph-aqs-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define DATABASE_SECRET "pYgIQQf7Oxhk0QIphceowkj8h4bxu3u0X6E593xY"
 
-### Manual Methods
+FirebaseData firebaseData;
+FirebaseJson json;
 
-#### Method 1: Direct File Opening
-1. Navigate to your project folder
-2. Double-click `index.html` to open in your default browser
+void setup() {
+  Firebase.begin(DATABASE_URL, DATABASE_SECRET);
 
-#### Method 2: Browser Address Bar
-Open your browser and enter: `file:///D:/Environmental%20Engineerig%20Club/AirMonitoringSystem/BIPH-Air-Monitoring-System/index.html`
+  json.set("co2", co2Value);
+  json.set("temp", temperature);
+  json.set("hum", humidity);
+  json.set("timestamp", time(nullptr)); // Unix epoch in seconds
 
-### Navigation
-- **Home Page** (`index.html`): Location selection and management
-- **Dashboard** (`dashboard.html`): Individual location monitoring (accessed via location cards)
+  String path = "/Devices/Sensor_Node_01/Readings";
+  Firebase.pushJSON(firebaseData, path.c_str(), json);
+}
 
-## Browser Compatibility
+void loop() {
+  // 每隔 60 秒推送一次
+  delay(60000);
+}
+```
 
-Works in all modern browsers that support:
-- ES6+ JavaScript features
-- localStorage API
-- Fetch API
-- CSS Grid and Flexbox
+## Firebase 安全规则建议
 
-## Development
+```json
+{
+  "rules": {
+    "Devices": {
+      "$deviceId": {
+        "Readings": {
+          ".read": true,
+          ".write": true,
+          ".indexOn": ["timestamp"]
+        }
+      }
+    }
+  }
+}
+```
 
-To extend the application:
+> **注意**: 上述规则允许公开读写，仅适用于开发/测试环境。生产环境请配置适当的认证和授权规则。
 
-1. Modify `data-manager.js` for additional data operations
-2. Update `locations.json` to change default locations
-3. Customize `index.html` styling and layout as needed
+## 许可证
 
-## License
-
-This project is open source and available under the MIT License.
+MIT License
